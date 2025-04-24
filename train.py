@@ -4,6 +4,16 @@ from model import build_user_tower, build_item_tower
 from sklearn.model_selection import train_test_split
 
 
+class SqueezeLayer(Layer):
+    """自定义Keras层实现squeeze操作"""
+
+    def __init__(self, axis=None, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+
+    def call(self, inputs):
+        return tf.squeeze(inputs, axis=self.axis)
+
 def create_dataset(data_path):
     """创建动态负采样数据管道"""
     data = pd.read_parquet(data_path)
