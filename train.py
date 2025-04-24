@@ -4,6 +4,11 @@ from model import build_user_tower, build_item_tower
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Layer, Input, Embedding, Concatenate, Dense
 
+# 检查GPU是否可用
+print("可用GPU:", tf.config.list_physical_devices('GPU'))
+
+# 自动选择GPU（默认行为）
+tf.config.set_soft_device_placement(True)
 
 def create_dataset(data_path):
     """创建动态负采样数据管道"""
@@ -62,15 +67,16 @@ if __name__ == "__main__":
     checkpoint_dir = './checkpoints'
     checkpoint_prefix = f"{checkpoint_dir}/dual_tower_epoch"
 
-    # 每2个epoch保存一次，只保留最新的3个检查点
+    # 新版TF使用save_freq替代period
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=checkpoint_prefix + "{epoch:02d}",
-        save_weights_only=True,  # 仅保存权重（节省空间）
-        save_freq='epoch',  # 按epoch保存
-        period=2,  # 每2个epoch保存一次
-        max_to_keep=3  # 最多保留3个检查点
+        filepath=f"{checkpoint_dir}/dual_tower_epoch{{epoch:02d}}",
+        save_weights_only=True,
+        save_freq='epoch',  # 每个epoch保存一次
+        save_best_only=False,
+        verbose=1,
+        mode='auto',
+        save_format='tf'  # 或'h5'根据需求选择
     )
-
     # ========== 3. 训练模型 ==========
     train_ds = create_dataset('processed_data.parquet')
     history = model.fit(
