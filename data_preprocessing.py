@@ -15,7 +15,7 @@ def load_and_preprocess():
 
     # 处理缺失值
     data['pvalue_level'] = data['pvalue_level'].fillna(0).astype(int)  # 确保整数类型 # -1表示未知
-    print(data.head(2))
+    print(data.columns.tolist())
     # data['new_user_class_level'].fillna(0, inplace=True)
     data['new_user_class_level'] = data['new_user_class_level'].fillna(0).astype(int)
 
