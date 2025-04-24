@@ -42,13 +42,13 @@ def data_overview(df, name):
 
     # 头部数据展示
     print("\n【头部数据】")
-    display(df.head(2))
+    print(df.head(2))
 
     # 数值型字段统计
     num_cols = df.select_dtypes(include=np.number).columns
     if len(num_cols) > 0:
         print("\n【数值型字段统计】")
-        display(df[num_cols].describe())
+        print(df[num_cols].describe())
     # print("max", max())
 
     # 分类字段统计
@@ -56,7 +56,7 @@ def data_overview(df, name):
     for col in cat_cols:
         if df[col].nunique() < 20:
             print(f"\n【{col} 值分布】")
-            display(df[col].value_counts(dropna=False).to_frame())
+            print(df[col].value_counts(dropna=False).to_frame())
 
 
 # 执行数据概览
@@ -72,7 +72,7 @@ def missing_analysis(df, name):
     print(f"\n===== {name} 空值分析 =====")
     missing = df.isnull().sum().to_frame(name='missing_count')
     missing['missing_ratio'] = missing['missing_count'] / len(df)
-    display(missing[missing['missing_count'] > 0])
+    print(missing[missing['missing_count'] > 0])
 
 
 for name, df in data_sets.items():
