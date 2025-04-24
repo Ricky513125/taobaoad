@@ -9,32 +9,52 @@ import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
 # 加载数据
-ad_feature = pd.read_csv('ad_feature.csv')
-user_profile = pd.read_csv('user_profile.csv')
+ad = pd.read_csv('data/ad_feature.csv')
+user = pd.read_csv('data/user_profile.csv')
 
 # 合并正样本数据（假设raw_sample已处理）
 # raw_sample包含user_id, adgroup_id, label(是否点击)
-raw_sample = pd.read_csv('raw_sample.csv')
+raw_sample = pd.read_csv('data/raw_sample.csv')
 data = pd.merge(raw_sample, user_profile, left_on='user_id', right_on='userid')
 data = pd.merge(data, ad_feature, on='adgroup_id')
 
 # 处理缺失值
-data['pvalue_level'].fillna(-1, inplace=True)
+data['pvalue_level'].fillna(0, inplace=True)
 data['new_user_class_level'].fillna(0, inplace=True)
 
 # 处理异常值
-data['price'] = np.where(data['price'] <= 0, data['price'].median(), data['price'])
+# data['price'] = np.where(data['price'] <= 0, data['price'].median(), data['price'])
 
 # 定义特征分桶
 def bucketize(series, num_buckets=10):
     return pd.qcut(series, num_buckets, labels=False, duplicates='drop')
 
-data['price_bucket'] = bucketize(data['price'], num_buckets=5)
+data['price_bucket'] = bucketize(data['price'], num_buckets=10)
 
-# 生成负样本 (1:4 正负样本比例)
-neg_samples = data[data['label'] == 0].sample(frac=0.8)
-pos_samples = data[data['label'] == 1]
-dataset = pd.concat([pos_samples, neg_samples]).sample(frac=1)
+# # 生成负样本 (1:4 正负样本比例)
+# neg_samples = data[data['clk'] == 0].sample(frac=0.8)
+# pos_samples = data[data['clk'] == 1]
+# dataset = pd.concat([pos_samples, neg_samples]).sample(frac=1)
+
+# == == == == == == == == == == ==
+
+# 2. 动态Batch内负采样
+# ======================
+def in_batch_negative_sampling(batch_data, neg_ratio=4):
+    """Batch内负采样（正样本:负样本 = 1:4）"""
+    # 分离正样本
+    pos_mask = batch_data['clk'] == 1
+    pos_data = tf.boolean_mask(batch_data, pos_mask)
+
+    # 生成负样本
+    neg_indices = tf.random.shuffle(tf.range(tf.shape(batch_data)[0]))[:tf.shape(pos_data)[0] * neg_ratio]
+    neg_data = tf.gather(batch_data, neg_indices)
+
+    # 合并并打乱
+    combined_data = tf.concat([pos_data, neg_data], axis=0)
+    return tf.random.shuffle(combined_data)
+
+
 
 
 ####

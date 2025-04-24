@@ -15,8 +15,16 @@ raw_sample = pd.read_csv("data/raw_sample.csv")
 # user_profile = pd.read_csv("data/user_profile.csv")
 behavior_log = pd.read_csv("data/behavior_log.csv")
 
-cleaned_behavior = behavior_log[behavior_log['time_stamp'] > 0]
-cleaned_behavior['tag_weight'] = np.where(cleaned_behavior['btag'] == 'pv', 1, np.where(cleaned_behavior['btag'] == 'cart', 2, np.where(cleaned_behavior['btag'] == 'fav', 3, 4)))
+# cleaned_behavior = behavior_log[behavior_log['time_stamp'] > 0]
+# cleaned_behavior['tag_weight'] = np.where(cleaned_behavior['btag'] == 'pv', 1, np.where(cleaned_behavior['btag'] == 'cart', 2, np.where(cleaned_behavior['btag'] == 'fav', 3, 4)))
+
+cleaned_behavior = behavior_log[behavior_log['time_stamp'] > 0].copy()
+cleaned_behavior['tag_weight'] = np.where(
+    cleaned_behavior['btag'] == 'pv', 1,
+    np.where(cleaned_behavior['btag'] == 'cart', 2,
+             np.where(cleaned_behavior['btag'] == 'fav', 3, 4))
+)
+
 cleaned_behavior.to_csv('data/cleaned_behavior.csv', index=False)
 
 
@@ -27,7 +35,7 @@ train_end = 1494547200    # 2017-05-12 23:59:59
 test_start = 1494547200   # 2017-05-13 00:00:00
 
 # 划分数据集（不转换时间戳格式）
-train_data = behavior_log[
+train_data = raw_sample[
     (raw_sample['time_stamp'] >= train_start) &
     (raw_sample['time_stamp'] <= train_end)
 ]
