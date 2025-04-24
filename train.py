@@ -78,7 +78,7 @@ if __name__ == "__main__":
         mode='auto'
     )
     # ========== 3. 训练模型 ==========
-    train_ds = create_dataset('processed_data.parquet')
+    train_ds = create_dataset('data/processed_data.parquet')
     history = model.fit(
         train_ds,
         epochs=10,
