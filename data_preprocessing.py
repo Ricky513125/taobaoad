@@ -10,7 +10,7 @@ def load_and_preprocess():
     raw_sample = pd.read_csv('data/raw_sample_train.csv')
 
     # 合并数据
-    data = pd.merge(raw_sample, user_profile, left_on='user_id', right_on='userid')
+    data = pd.merge(raw_sample, user_profile, left_on='user', right_on='userid')
     data = pd.merge(data, ad_feature, on='adgroup_id')
 
     # 处理缺失值
