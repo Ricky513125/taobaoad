@@ -18,15 +18,15 @@ def build_user_tower(embedding_dim=8, hidden_units=[256, 128], name='user_tower'
     """构建用户塔（User Tower 模型）"""
     input_dims = {
         'categorical': {
-            'cms_segid': 100,
-            'cms_group_id': 50,
-            'gender': 3,
-            'age_level': 8,
-            'pvalue_level': 4,
-            'shopping_level': 4,
-            'city_level': 5
+            'user_cms_segid': 100,
+            'user_cms_group_id': 50,
+            'user_gender': 3,
+            'user_age_level': 8,
+            'user_pvalue_level': 4,
+            'user_shopping_level': 4,
+            'user_city_level': 5
         },
-        'numerical': ['occupation']  # occupation 是数值型，0或1
+        'numerical': ['user_occupation']  # occupation 是数值型，0或1
     }
 
     # 1. 构建输入层
@@ -59,25 +59,25 @@ def build_item_tower(embedding_dim=16, hidden_units=[256, 128], name='item_tower
     """构建广告塔（Item Tower）"""
     # 1. 构建输入层（统一数值类型）
     inputs = {
-        'adgroup_id': Input(shape=(1,), name='adgroup_id', dtype=tf.int32),
-        'cate_id': Input(shape=(1,), name='cate_id', dtype=tf.int32),
-        'campaign_id': Input(shape=(1,), name='campaign_id', dtype=tf.int32),
-        'customer': Input(shape=(1,), name='customer', dtype=tf.int32),
-        'brand': Input(shape=(1,), name='brand', dtype=tf.float32),  # 改为int32类型
-        'price': Input(shape=(1,), name='price', dtype=tf.float32)
+        'item_adgroup_id': Input(shape=(1,), name='adgroup_id', dtype=tf.int32),
+        'item_cate_id': Input(shape=(1,), name='cate_id', dtype=tf.int32),
+        'item_campaign_id': Input(shape=(1,), name='campaign_id', dtype=tf.int32),
+        'item_customer': Input(shape=(1,), name='customer', dtype=tf.int32),
+        'item_brand': Input(shape=(1,), name='brand', dtype=tf.float32),  # 改为int32类型
+        'item_price': Input(shape=(1,), name='price', dtype=tf.float32)
     }
 
     # 2. 嵌入层处理（使用自定义SqueezeLayer）
     embeddings = [
-        SqueezeLayer(axis=1)(Embedding(1000000, embedding_dim, name='embed_adgroup')(inputs['adgroup_id'])),
-        SqueezeLayer(axis=1)(Embedding(1000, embedding_dim, name='embed_cate')(inputs['cate_id'])),
-        SqueezeLayer(axis=1)(Embedding(100000, embedding_dim, name='embed_campaign')(inputs['campaign_id'])),
-        SqueezeLayer(axis=1)(Embedding(500000, embedding_dim, name='embed_customer')(inputs['customer'])),
-        SqueezeLayer(axis=1)(Embedding(10000, embedding_dim, name='embed_brand')(inputs['brand'])),  # brand改为嵌入
+        SqueezeLayer(axis=1)(Embedding(1000000, embedding_dim, name='embed_adgroup')(inputs['item_adgroup_id'])),
+        SqueezeLayer(axis=1)(Embedding(1000, embedding_dim, name='embed_cate')(inputs['item_cate_id'])),
+        SqueezeLayer(axis=1)(Embedding(100000, embedding_dim, name='embed_campaign')(inputs['item_campaign_id'])),
+        SqueezeLayer(axis=1)(Embedding(500000, embedding_dim, name='embed_customer')(inputs['item_customer'])),
+        SqueezeLayer(axis=1)(Embedding(10000, embedding_dim, name='embed_brand')(inputs['item_brand'])),  # brand改为嵌入
     ]
 
     # 3. 数值特征处理
-    embeddings.append(inputs['price'])  # 价格保持float32
+    embeddings.append(inputs['item_price'])  # 价格保持float32
 
     # 4. DNN 部分
     concat = Concatenate()(embeddings)

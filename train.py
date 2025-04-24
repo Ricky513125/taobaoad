@@ -1,95 +1,140 @@
 import tensorflow as tf
-import numpy as np
-from model import build_user_tower, build_item_tower
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Layer, Input, Embedding, Concatenate, Dense
 import pandas as pd
+from model import build_user_tower, build_item_tower
 
-# 检查GPU是否可用
-print("可用GPU:", tf.config.list_physical_devices('GPU'))
+# GPU配置
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
 
-# 自动选择GPU（默认行为）
-tf.config.set_soft_device_placement(True)
 
-def create_dataset(data_path):
-    """创建动态负采样数据管道"""
+def create_dataset(data_path, batch_size=1024, neg_ratio=4):
+    """创建符合双塔结构的数据管道"""
     data = pd.read_parquet(data_path)
 
-    def in_batch_negative_sampling(batch, neg_ratio=4):
-        """Batch内负采样"""
-        pos_mask = batch['clk'] == 1
-        pos_data = {k: tf.boolean_mask(v, pos_mask) for k, v in batch.items()}
-
-        # 生成负样本索引
-        neg_indices = tf.random.shuffle(tf.range(tf.shape(batch['clk'])[0]))[:tf.shape(pos_data['clk'])[0] * neg_ratio]
-        neg_data = {k: tf.gather(v, neg_indices) for k, v in batch.items()}
-
-        # 合并正负样本
-        combined = {k: tf.concat([pos_data[k], neg_data[k]], axis=0) for k in batch.keys()}
-        shuffled_indices = tf.random.shuffle(tf.range(tf.shape(combined['clk'])[0]))
-        return {k: tf.gather(v, shuffled_indices) for k, v in combined.items()}
-
-    # 定义特征转换
-    features = {
-        'gender': tf.cast(data['final_gender_code'], tf.int32),
-        'cms_segid': tf.cast(data['cms_segid'], tf.int32),
-        'cms_group_id': tf.cast(data['cms_group_id'], tf.int32),
-        'adgroup_id': tf.cast(data['adgroup_id'], tf.int32),
-        'age_level': tf.cast(data['age_level'], tf.int32),
-        'pvalue_level': tf.cast(data['pvalue_level'], tf.int32),  # -1→0
-        'shopping_level': tf.cast(data['shopping_level'], tf.int32),
-        'city_level': tf.cast(data['new_user_class_level'], tf.int32),
-        'occupation': tf.cast(data['occupation'], tf.float32),
-        'cate_id': tf.cast(data['cate_id'], tf.int32),
-        'brand': tf.cast(data['brand'], tf.float32),
-        # 'price_bucket': tf.cast(data['price_bucket'], tf.int32),
-        'campaign_id': tf.cast(data['campaign_id'], tf.float32),
-        'customer': tf.cast(data['customer'], tf.int32),
-        'price': tf.cast(data['price'], tf.float32),
-        'clk': tf.cast(data['clk'], tf.int32)
+    # 分离用户特征和广告特征
+    user_features = {
+        'user_gender': data['final_gender_code'].values,
+        'user_cms_segid': data['cms_segid'].values,
+        'user_cms_group_id': data['cms_group_id'].values,
+        'user_age_level': data['age_level'].values,
+        'user_pvalue_level': data['pvalue_level'].values + 1,  # -1→0
+        'user_shopping_level': data['shopping_level'].values,
+        'user_city_level': data['new_user_class_level'].values,
+        'user_occupation': data['occupation'].values.astype('float32')
     }
 
-    ds = tf.data.Dataset.from_tensor_slices(features)
-    ds = ds.shuffle(100000).batch(1024).map(in_batch_negative_sampling)
-    return ds
+    item_features = {
+        'item_adgroup_id': data['adgroup_id'].values,
+        'item_cate_id': data['cate_id'].values,
+        'item_campaign_id': data['campaign_id'].values.astype('int32'),
+        'item_customer': data['customer'].values,
+        'item_brand': data['brand'].values.astype('int32'),
+        'item_price': data['price'].values.astype('float32')
+    }
+
+    labels = data['clk'].values
+
+    # 创建基础数据集
+    dataset = tf.data.Dataset.from_tensor_slices((
+        {**user_features, **item_features},  # 合并特征
+    labels
+    ))
+
+    # Batch内负采样
+    def batch_neg_sampling(batch_features, batch_labels):
+        pos_mask = batch_labels == 1
+        pos_count = tf.reduce_sum(tf.cast(pos_mask, tf.int32))
+
+        # 正样本
+        pos_features = {
+            k: tf.boolean_mask(v, pos_mask)
+            for k, v in batch_features.items()
+        }
+
+        # 负样本(从同batch随机选择)
+        neg_indices = tf.random.shuffle(tf.range(tf.shape(batch_labels)[0]))[:pos_count * neg_ratio]
+        neg_features = {
+            k: tf.gather(v, neg_indices)
+            for k, v in batch_features.items()
+        }
+
+        # 合并正负样本
+        combined_features = {
+            k: tf.concat([pos_features[k], neg_features[k]], axis=0)
+            for k in batch_features.keys()
+        }
+        combined_labels = tf.concat([
+            tf.ones_like(batch_labels[:pos_count], dtype=tf.float32),
+            tf.zeros_like(batch_labels[:pos_count * neg_ratio], dtype=tf.float32)
+        ], axis=0)
+
+        # 打乱顺序
+        indices = tf.random.shuffle(tf.range(tf.shape(combined_labels)[0]))
+        return (
+            {k: tf.gather(v, indices) for k, v in combined_features.items()},
+            tf.gather(combined_labels, indices)
+        )
+
+    return (dataset
+            .shuffle(100000)
+            .batch(batch_size)
+            .map(batch_neg_sampling, num_parallel_calls=tf.data.AUTOTUNE)
+            .prefetch(tf.data.AUTOTUNE))
 
 
 if __name__ == "__main__":
-    # 构建模型
+    # 1. 构建模型
     user_tower = build_user_tower()
     item_tower = build_item_tower()
 
-    # 计算相似度
-    dot_product = tf.keras.layers.Dot(axes=1, normalize=True)([user_tower.output, item_tower.output])
-    output = Dense(1, activation='sigmoid')(dot_product)
-    model = tf.keras.Model(inputs=[user_tower.input, item_tower.input], outputs=output)
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['AUC'])
+    # 2. 组合双塔模型
+    user_inputs = {k: v for k, v in user_tower.input.items()}
+    item_inputs = {k: v for k, v in item_tower.input.items()}
 
-    # ========== 2. 配置检查点回调 ==========
-    checkpoint_dir = './checkpoints'
-    checkpoint_prefix = f"{checkpoint_dir}/dual_tower_epoch"
+    user_embed = user_tower(user_inputs)
+    item_embed = item_tower(item_inputs)
 
-    # 新版TF使用save_freq替代period
-    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath='./checkpoints/dual_tower_epoch{epoch:02d}.weights.h5',  # 必须添加.weights.h5后缀
-        save_weights_only=True,
-        save_freq='epoch',  # 每个epoch保存一次
-        save_best_only=False,
-        verbose=1,
-        mode='auto'
+    # 相似度计算
+    dot_product = tf.keras.layers.Dot(axes=1, normalize=True)([user_embed, item_embed])
+    output = tf.keras.layers.Dense(1, activation='sigmoid')(dot_product)
+
+    model = tf.keras.Model(
+        inputs={**user_inputs, **item_inputs},
+    outputs = output
     )
-    # ========== 3. 训练模型 ==========
+
+    # 3. 编译模型
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+        loss='binary_crossentropy',
+        metrics=['AUC']
+    )
+
+    # 4. 训练配置
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath='checkpoints/model_{epoch:02d}.h5',
+        save_weights_only=False,  # 保存完整模型
+        monitor='val_auc',
+        mode='max',
+        save_best_only=True,
+        verbose=1
+    )
+
+    # 5. 训练
     train_ds = create_dataset('data/processed_data.parquet')
     history = model.fit(
         train_ds,
         epochs=10,
-        callbacks=[checkpoint_callback]  # 添加检查点回调
+        callbacks=[checkpoint_callback],
+        verbose=1
     )
 
-    # ========== 4. 最终模型保存 ==========
-    # 保存完整模型（可选）
-    model.save('final_model.h5')  # HDF5格式
-
-    # 单独保存双塔（用于线上服务）
-    user_tower.save('user_tower.h5')
-    item_tower.save('item_tower.h5')
+    # 6. 保存最终模型
+    model.save('final_model')
+    user_tower.save('user_tower')
+    item_tower.save('item_tower')
