@@ -74,8 +74,7 @@ if __name__ == "__main__":
         save_freq='epoch',  # 每个epoch保存一次
         save_best_only=False,
         verbose=1,
-        mode='auto',
-        save_format='tf'  # 或'h5'根据需求选择
+        mode='auto'
     )
     # ========== 3. 训练模型 ==========
     train_ds = create_dataset('processed_data.parquet')
