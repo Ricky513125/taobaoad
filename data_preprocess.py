@@ -38,5 +38,5 @@ print("训练集时间戳类型:", train_data['time_stamp'].dtype)  # 应输出 
 print("测试集时间戳类型:", test_data['time_stamp'].dtype)  # 应输出 int64
 
 # 保存数据集（保持原始格式）
-train_data.to_csv('raw_sample_train.csv', index=False)
-test_data.to_csv('raw_sample_test.csv', index=False)
+train_data.to_csv('data/raw_sample_train.csv', index=False)
+test_data.to_csv('data/raw_sample_test.csv', index=False)
