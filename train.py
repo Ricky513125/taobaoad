@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     # 新版TF使用save_freq替代period
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=f"{checkpoint_dir}/dual_tower_epoch{{epoch:02d}}",
+        filepath='./checkpoints/dual_tower_epoch{epoch:02d}.weights.h5',  # 必须添加.weights.h5后缀
         save_weights_only=True,
         save_freq='epoch',  # 每个epoch保存一次
         save_best_only=False,
