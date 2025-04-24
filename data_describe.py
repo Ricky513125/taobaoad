@@ -19,9 +19,9 @@ pd.set_option('display.float_format', lambda x: '%.2f' % x)
 
 # 加载四个数据集
 data_sets = {
-    "raw_sample": pd.read_csv("data/raw_sample.csv"),
-    "ad_feature": pd.read_csv("data/ad_feature.csv"),
-    "user_profile": pd.read_csv("data/user_profile.csv"),
+    # "raw_sample": pd.read_csv("data/raw_sample.csv"),
+    # "ad_feature": pd.read_csv("data/ad_feature.csv"),
+    # "user_profile": pd.read_csv("data/user_profile.csv"),
     "behavior_log": pd.read_csv("data/behavior_log.csv")  # 抽样1%行为日志, sample_frac=0.01
 }
 
