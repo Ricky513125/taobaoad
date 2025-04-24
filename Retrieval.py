@@ -101,7 +101,7 @@ user_tower = build_tower(
         'categorical': {
             'gender': 3,  # 0:缺失,1:男,2:女
             'age_level': 9,
-            'pvalue_level': 4,  # -1,1,2,3
+            'pvalue_level': 4,  # 0,1,2,3
             'shopping_level': 4,
             'city_level': 7
         },
@@ -150,7 +150,7 @@ def df_to_dataset(data, batch_size=1024):
         # 用户特征
         'gender': data['final_gender_code'].values,
         'age_level': data['age_level'].values,
-        'pvalue_level': data['pvalue_level'].values + 1,  # -1变为0
+        'pvalue_level': data['pvalue_level'].values,  # -1变为0
         'shopping_level': data['shopping_level'].values,
         'city_level': data['new_user_class_level'].values,
         'occupation': data['occupation'].values,
