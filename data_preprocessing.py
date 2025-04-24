@@ -32,4 +32,4 @@ def load_and_preprocess():
 
 if __name__ == "__main__":
     data = load_and_preprocess()
-    data.to_parquet('processed_data.parquet')  # 保存预处理数据
+    data.to_parquet('data/processed_data.parquet')  # 保存预处理数据
