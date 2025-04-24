@@ -33,7 +33,7 @@ def create_dataset(data_path):
     features = {
         'gender': tf.cast(data['final_gender_code'], tf.int32),
         'cms_segid': tf.cast(data['cms_segid'], tf.int32),
-        'cms_group': tf.cast(data['cms_group'], tf.int32),
+        'cms_group_id': tf.cast(data['cms_group_id'], tf.int32),
         'age_level': tf.cast(data['age_level'], tf.int32),
         'pvalue_level': tf.cast(data['pvalue_level'], tf.int32),  # -1→0
         'shopping_level': tf.cast(data['shopping_level'], tf.int32),

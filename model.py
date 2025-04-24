@@ -19,7 +19,7 @@ def build_user_tower(embedding_dim=8, hidden_units=[256, 128], name='user_tower'
     input_dims = {
         'categorical': {
             'cms_segid': 100,
-            'cms_group': 50,
+            'cms_group_id': 50,
             'gender': 3,
             'age_level': 8,
             'pvalue_level': 4,
