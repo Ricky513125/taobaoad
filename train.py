@@ -3,6 +3,7 @@ import numpy as np
 from model import build_user_tower, build_item_tower
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Layer, Input, Embedding, Concatenate, Dense
+import pandas as pd
 
 # 检查GPU是否可用
 print("可用GPU:", tf.config.list_physical_devices('GPU'))
