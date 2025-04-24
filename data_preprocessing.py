@@ -17,7 +17,7 @@ def load_and_preprocess():
     data['pvalue_level'] = data['pvalue_level'].fillna(0).astype(int)  # 确保整数类型 # -1表示未知
     print(data.columns.tolist())
     # data['new_user_class_level'].fillna(0, inplace=True)
-    data['new_user_class_level '] = data['new_user_class_level '].fillna(0).astype(int).rename({'new_user_class_level ': 'new_user_class_level'}, axis=1)
+    data['new_user_class_level'] = data['new_user_class_level '].fillna(0).astype(int)
 
     # 处理异常值
     data['price'] = np.where(data['price'] <= 0, data['price'].median(), data['price'])
