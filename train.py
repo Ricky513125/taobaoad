@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     # 5. 训练
     train_ds = create_dataset('data/processed_data.parquet',is_train=True)
-    test_ds = create_dataset('data/raw_sample_test.parquet', is_train=False)  # 测试集
+    test_ds = create_dataset('data/processed_data_test.parquet', is_train=False)  # 测试集
     history = model.fit(
         train_ds,
         validation_data=test_ds,  # 加入测试集作为验证集

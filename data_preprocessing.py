@@ -60,4 +60,4 @@ if __name__ == "__main__":
     data = load_and_preprocess()
     data.to_parquet('data/processed_data.parquet')  # 保存预处理数据
     d = load_and_preprocess_test()
-    d.to_parquet('data/processed_data_train.parquet')
+    d.to_parquet('data/processed_data_test.parquet')
