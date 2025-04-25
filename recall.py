@@ -22,7 +22,7 @@ class RecallService:
         self.index, self.item_ids = self._load_index(index_dir)
         self.feature_config = self._load_feature_config(index_dir)
 
-    def recall(self, user_features: Dict[str, Any], top_k: int = 1000) -> Tuple[np.ndarray, np.ndarray]:
+    def recall(self, user_features: Dict[str, any], top_k: int = 1000) -> Tuple[np.ndarray, np.ndarray]:
         """执行召回
 
         Args:
@@ -55,7 +55,7 @@ class RecallService:
             logger.error(f"Failed to load index: {str(e)}")
             raise
 
-    def _get_user_vector(self, user_features: Dict[str, Any]) -> np.ndarray:
+    def _get_user_vector(self, user_features: Dict[str, any]) -> np.ndarray:
         """生成用户向量"""
         prepared_features = self._prepare_user_features(user_features)
         user_vec = self.user_tower.predict(prepared_features, verbose=0)
@@ -66,7 +66,7 @@ class RecallService:
 
         return user_vec
 
-    def _prepare_user_features(self, raw_features: Dict[str, Any]) -> Dict[str, np.ndarray]:
+    def _prepare_user_features(self, raw_features: Dict[str, any]) -> Dict[str, np.ndarray]:
         """准备模型输入特征"""
         features = {}
         for feat_name, feat_value in raw_features.items():
