@@ -200,7 +200,7 @@ if __name__ == "__main__":
     parser.add_argument('--embedding_dim', type=int, default=64, help='Embedding dimension for features')
     parser.add_argument('--seq_emb_dim', type=int, default=32, help='Embedding dimension for sequences')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=1024, help='Batch size')
     parser.add_argument('--neg_ratio', type=int, default=4, help='Negative sample ratio')
     parser.add_argument('--log_dir', type=str, default='./logs', help='Directory for TensorBoard logs')
