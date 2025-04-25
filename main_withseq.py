@@ -191,7 +191,7 @@ def train_model(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train Two-Tower Model with Sequence Enhancement')
-    parser.add_argument('--train_data', type=str, required=True, default='data/processed_data.parquet',help='Path to training data')
+    parser.add_argument('--train_data', type=str, default='data/processed_data.parquet',help='Path to training data')
     parser.add_argument('--val_data', type=str, default=None, help='Path to validation data')
     parser.add_argument('--test_data', type=str, default='data/processed_data_test.parquet', help='Path to test data')
     parser.add_argument('--behavior_data', type=str, default='data/cleaned_behavior.csv', help='Path to behavior data for graph building')
