@@ -191,10 +191,10 @@ def train_model(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train Two-Tower Model with Sequence Enhancement')
-    parser.add_argument('--train_data', type=str, required=True, help='Path to training data')
+    parser.add_argument('--train_data', type=str, required=True, default='data/processed_data.parquet',help='Path to training data')
     parser.add_argument('--val_data', type=str, default=None, help='Path to validation data')
-    parser.add_argument('--test_data', type=str, default=None, help='Path to test data')
-    parser.add_argument('--behavior_data', type=str, required=True, help='Path to behavior data for graph building')
+    parser.add_argument('--test_data', type=str, default='data/processed_data_test.parquet', help='Path to test data')
+    parser.add_argument('--behavior_data', type=str, default='data/cleaned_behavior.csv', help='Path to behavior data for graph building')
     parser.add_argument('--graph_path', type=str, default='./graph.pkl', help='Path to save/load graph')
     parser.add_argument('--sequence_path', type=str, default='./sequences.txt', help='Path to save/load sequences')
     parser.add_argument('--embedding_dim', type=int, default=64, help='Embedding dimension for features')
