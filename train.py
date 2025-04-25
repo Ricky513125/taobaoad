@@ -12,9 +12,10 @@ if gpus:
         print(e)
 
 
-def create_dataset(data_path, batch_size=1024, neg_ratio=4):
+def create_dataset(data_path, batch_size=1024, neg_ratio=4, is_train=True):
     """创建符合双塔结构的数据管道"""
-    data = pd.read_parquet(data_path)
+    """创建数据管道，训练集需要负采样，测试集不需要"""
+    data = pd.read_parquet(data_path) if data_path.endswith('.parquet') else pd.read_csv(data_path)
 
     # 分离用户特征和广告特征
     user_features = {
@@ -45,46 +46,87 @@ def create_dataset(data_path, batch_size=1024, neg_ratio=4):
     labels
     ))
 
+    if is_train:
+        # 训练集：Batch内负采样（与原始代码相同）
+        def batch_neg_sampling(batch_features, batch_labels):
+            pos_mask = batch_labels == 1
+            pos_count = tf.reduce_sum(tf.cast(pos_mask, tf.int32))
+
+            pos_features = {
+                k: tf.boolean_mask(v, pos_mask)
+                for k, v in batch_features.items()
+            }
+
+            neg_indices = tf.random.shuffle(tf.range(tf.shape(batch_labels)[0]))[:pos_count * neg_ratio]
+            neg_features = {
+                k: tf.gather(v, neg_indices)
+                for k, v in batch_features.items()
+            }
+
+            combined_features = {
+                k: tf.concat([pos_features[k], neg_features[k]], axis=0)
+                for k in batch_features.keys()
+            }
+            combined_labels = tf.concat([
+                tf.ones_like(batch_labels[:pos_count], dtype=tf.float32),
+                tf.zeros_like(batch_labels[:pos_count * neg_ratio], dtype=tf.float32)
+            ], axis=0)
+
+            indices = tf.random.shuffle(tf.range(tf.shape(combined_labels)[0]))
+            return (
+                {k: tf.gather(v, indices) for k, v in combined_features.items()},
+                tf.gather(combined_labels, indices)
+            )
+
+        return (dataset
+                .shuffle(100000)
+                .batch(batch_size)
+                .map(batch_neg_sampling, num_parallel_calls=tf.data.AUTOTUNE)
+                .prefetch(tf.data.AUTOTUNE))
+    else:
+        # 测试集：直接返回原始数据（不需要负采样）
+        return dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
     # Batch内负采样
-    def batch_neg_sampling(batch_features, batch_labels):
-        pos_mask = batch_labels == 1
-        pos_count = tf.reduce_sum(tf.cast(pos_mask, tf.int32))
-
-        # 正样本
-        pos_features = {
-            k: tf.boolean_mask(v, pos_mask)
-            for k, v in batch_features.items()
-        }
-
-        # 负样本(从同batch随机选择)
-        neg_indices = tf.random.shuffle(tf.range(tf.shape(batch_labels)[0]))[:pos_count * neg_ratio]
-        neg_features = {
-            k: tf.gather(v, neg_indices)
-            for k, v in batch_features.items()
-        }
-
-        # 合并正负样本
-        combined_features = {
-            k: tf.concat([pos_features[k], neg_features[k]], axis=0)
-            for k in batch_features.keys()
-        }
-        combined_labels = tf.concat([
-            tf.ones_like(batch_labels[:pos_count], dtype=tf.float32),
-            tf.zeros_like(batch_labels[:pos_count * neg_ratio], dtype=tf.float32)
-        ], axis=0)
-
-        # 打乱顺序
-        indices = tf.random.shuffle(tf.range(tf.shape(combined_labels)[0]))
-        return (
-            {k: tf.gather(v, indices) for k, v in combined_features.items()},
-            tf.gather(combined_labels, indices)
-        )
-
-    return (dataset
-            .shuffle(100000)
-            .batch(batch_size)
-            .map(batch_neg_sampling, num_parallel_calls=tf.data.AUTOTUNE)
-            .prefetch(tf.data.AUTOTUNE))
+    # def batch_neg_sampling(batch_features, batch_labels):
+    #     pos_mask = batch_labels == 1
+    #     pos_count = tf.reduce_sum(tf.cast(pos_mask, tf.int32))
+    #
+    #     # 正样本
+    #     pos_features = {
+    #         k: tf.boolean_mask(v, pos_mask)
+    #         for k, v in batch_features.items()
+    #     }
+    #
+    #     # 负样本(从同batch随机选择)
+    #     neg_indices = tf.random.shuffle(tf.range(tf.shape(batch_labels)[0]))[:pos_count * neg_ratio]
+    #     neg_features = {
+    #         k: tf.gather(v, neg_indices)
+    #         for k, v in batch_features.items()
+    #     }
+    #
+    #     # 合并正负样本
+    #     combined_features = {
+    #         k: tf.concat([pos_features[k], neg_features[k]], axis=0)
+    #         for k in batch_features.keys()
+    #     }
+    #     combined_labels = tf.concat([
+    #         tf.ones_like(batch_labels[:pos_count], dtype=tf.float32),
+    #         tf.zeros_like(batch_labels[:pos_count * neg_ratio], dtype=tf.float32)
+    #     ], axis=0)
+    #
+    #     # 打乱顺序
+    #     indices = tf.random.shuffle(tf.range(tf.shape(combined_labels)[0]))
+    #     return (
+    #         {k: tf.gather(v, indices) for k, v in combined_features.items()},
+    #         tf.gather(combined_labels, indices)
+    #     )
+    #
+    # return (dataset
+    #         .shuffle(100000)
+    #         .batch(batch_size)
+    #         .map(batch_neg_sampling, num_parallel_calls=tf.data.AUTOTUNE)
+    #         .prefetch(tf.data.AUTOTUNE))
 
 
 if __name__ == "__main__":
@@ -126,13 +168,18 @@ if __name__ == "__main__":
     )
 
     # 5. 训练
-    train_ds = create_dataset('data/processed_data.parquet')
+    train_ds = create_dataset('data/processed_data.parquet',is_train=True)
+    test_ds = create_dataset('data/raw_sample_test.csv', is_train=False)  # 测试集
     history = model.fit(
         train_ds,
-        epochs=10,
+        validation_data=test_ds,  # 加入测试集作为验证集
+        epochs=100,
         callbacks=[checkpoint_callback],
         verbose=1
     )
+    # 7. 最终评估测试集
+    test_loss, test_auc = model.evaluate(test_ds, verbose=1)
+    print(f"\nTest AUC: {test_auc:.4f}")
 
     # 6. 保存最终模型
     model.save('final_model')

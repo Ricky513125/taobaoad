@@ -86,3 +86,11 @@ def build_item_tower(embedding_dim=16, hidden_units=[256, 128], name='item_tower
         x = Dense(units, activation='relu')(x)
 
     return Model(inputs=inputs, outputs=x, name=name)
+
+def load_models(model_dir):
+    """加载预训练模型"""
+    user_tower = UserTower()
+    user_tower.load_weights(f"{model_dir}/user_tower")
+    item_tower = ItemTower()
+    item_tower.load_weights(f"{model_dir}/item_tower")
+    return user_tower, item_tower
