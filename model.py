@@ -3,15 +3,28 @@ from tensorflow.keras.layers import Layer, Input, Embedding, Concatenate, Dense
 from tensorflow.keras.models import Model
 
 
-class SqueezeLayer(Layer):
-    """自定义Keras层实现squeeze操作"""
+# class SqueezeLayer(Layer):
+#     """自定义Keras层实现squeeze操作"""
+#
+#     def __init__(self, axis=None, **kwargs):
+#         super().__init__(**kwargs)
+#         self.axis = axis
+#
+#     def call(self, inputs):
+#         return tf.squeeze(inputs, axis=self.axis)
 
-    def __init__(self, axis=None, **kwargs):
-        super().__init__(**kwargs)
-        self.axis = axis
+class SqueezeLayer(Layer):
+    def __init__(self, axis=-1, **kwargs):
+        super(SqueezeLayer, self).__init__(**kwargs)
+        self.axis = axis  # 必须保存参数
 
     def call(self, inputs):
         return tf.squeeze(inputs, axis=self.axis)
+
+    def get_config(self):
+        config = super(SqueezeLayer, self).get_config()
+        config.update({'axis': self.axis})  # 序列化自定义参数
+        return config
 
 
 def build_user_tower(embedding_dim=8, hidden_units=[256, 128], name='user_tower'):
