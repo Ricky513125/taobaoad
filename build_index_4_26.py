@@ -7,7 +7,8 @@ from tqdm import tqdm
 import time
 import gc
 from multiprocessing import cpu_count
-from keras.layers import TFSMLayer
+from tensorflow.keras.layers import Input, Embedding, Dense, Concatenate
+from tensorflow.keras.models import Model
 
 # GPU配置初始化
 gpus = tf.config.list_physical_devices('GPU')
@@ -24,7 +25,7 @@ if gpus:
 class SqueezeLayer(tf.keras.layers.Layer):
     """保持与您的模型完全一致"""
 
-    def __init__(self, axis=-1, **kwargs):
+    def __init__(self, axis=-1, ​ ** kwargs):
         super().__init__(**kwargs)
         self.axis = axis
 
@@ -33,63 +34,153 @@ class SqueezeLayer(tf.keras.layers.Layer):
 
 
 def load_item_model(model_path):
-    """GPU优化的模型加载 - 适配Keras 3"""
+    """加载训练好的item_tower模型"""
     try:
         # 显式指定GPU设备
         with tf.device('/GPU:0'):
-            # 尝试直接加载Keras 3格式
-            try:
-                model = tf.keras.models.load_model(
-                    model_path,
-                    custom_objects={'SqueezeLayer': SqueezeLayer}
-                )
-                return model
-            except:
-                # 如果失败，尝试使用TFSMLayer加载旧格式
-                print("检测到旧模型格式，使用TFSMLayer加载...")
-                inputs = {
-                    'item_adgroup_id': tf.keras.Input(shape=(1,), dtype=tf.int32, name='item_adgroup_id'),
-                    'item_cate_id': tf.keras.Input(shape=(1,), dtype=tf.int32, name='item_cate_id'),
-                    'item_campaign_id': tf.keras.Input(shape=(1,), dtype=tf.int32, name='item_campaign_id'),
-                    'item_customer': tf.keras.Input(shape=(1,), dtype=tf.int32, name='item_customer'),
-                    'item_brand': tf.keras.Input(shape=(1,), dtype=tf.float32, name='item_brand'),
-                    'item_price': tf.keras.Input(shape=(1,), dtype=tf.float32, name='item_price')
-                }
+            # 检查是否是SavedModel格式目录
+            if os.path.isdir(model_path):
+                # 验证模型文件是否存在
+                required_files = ['saved_model.pb', 'keras_metadata.pb', 'variables']
+                if not all(os.path.exists(os.path.join(model_path, f)) for f in required_files):
+                    raise ValueError("SavedModel文件不完整")
 
-                # 使用TFSMLayer加载旧模型
-                sm_layer = TFSMLayer(
-                    model_path,
-                    call_endpoint='serving_default',
-                    name='loaded_model'
-                )
-                outputs = sm_layer(inputs)
+                print("加载SavedModel格式的item_tower...")
+                # 使用tf.saved_model.load加载模型
+                model = tf.saved_model.load(model_path)
 
-                # 构建新模型
-                model = tf.keras.Model(inputs=inputs, outputs=outputs)
-                return model
+                # 获取具体的签名
+                if 'serving_default' in model.signatures:
+                    serve = model.signatures['serving_default']
+
+                    # 创建包装函数以匹配原始模型结构
+                    @tf.function
+                    def predict_fn(inputs):
+                        # 转换输入格式以匹配签名
+                        input_dict = {
+                            'adgroup_id': tf.cast(inputs['item_adgroup_id'], tf.int32),
+                            'cate_id': tf.cast(inputs['item_cate_id'], tf.int32),
+                            'campaign_id': tf.cast(inputs['item_campaign_id'], tf.int32),
+                            'customer': tf.cast(inputs['item_customer'], tf.int32),
+                            'brand': tf.cast(inputs['item_brand'], tf.float32),
+                            'price': inputs['item_price']
+                        }
+                        return serve(**input_dict)['output_0']
+
+                    return predict_fn
+                else:
+                    raise ValueError("SavedModel中没有找到serving_default签名")
+            else:
+                raise ValueError("模型路径不是有效的SavedModel目录")
     except Exception as e:
-        raise RuntimeError(f"模型加载失败: {str(e)}\n建议: 1. 检查模型路径 2. 确认模型格式 3. 尝试转换模型为.keras格式")
+        raise RuntimeError(f"模型加载失败: {str(e)}\n建议: 1. 检查模型路径 2. 确认模型格式")
 
 
-# 其余函数保持不变...
 def create_dataset(item_data, batch_size=1024):
     """创建TF Dataset管道（GPU优化）"""
-    # ... (保持原样)
+
+    # 生成符合模型输入结构的字典
+    def gen():
+        for _, row in item_data.iterrows():
+            yield {
+                'item_adgroup_id': np.array([row['adgroup_id']], dtype=np.int32),
+                'item_cate_id': np.array([row['cate_id']], dtype=np.int32),
+                'item_campaign_id': np.array([row['campaign_id']], dtype=np.int32),
+                'item_customer': np.array([row['customer']], dtype=np.int32),
+                'item_brand': np.array([row['brand']], dtype=np.float32),
+                'item_price': np.array([row['price']], dtype=np.float32)
+            }
+
+    output_signature = {
+        'item_adgroup_id': tf.TensorSpec(shape=(1,), dtype=tf.int32),
+        'item_cate_id': tf.TensorSpec(shape=(1,), dtype=tf.int32),
+        'item_campaign_id': tf.TensorSpec(shape=(1,), dtype=tf.int32),
+        'item_customer': tf.TensorSpec(shape=(1,), dtype=tf.int32),
+        'item_brand': tf.TensorSpec(shape=(1,), dtype=tf.float32),
+        'item_price': tf.TensorSpec(shape=(1,), dtype=tf.float32)
+    }
+
+    return tf.data.Dataset.from_generator(
+        gen,
+        output_signature=output_signature
+    ).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
 
 def generate_vectors_gpu(model, item_data, batch_size=8192):
     """GPU加速的向量生成"""
-    # ... (保持原样)
+    dataset = create_dataset(item_data, batch_size)
+
+    # 预分配GPU内存
+    num_items = len(item_data)
+    sample_output = model(next(iter(dataset.take(1))))
+    vector_dim = sample_output.shape[-1]
+
+    # 使用锁页内存(pinned memory)加速CPU-GPU传输
+    vectors = np.zeros((num_items, vector_dim), dtype=np.float32)
+
+    # 多进程数据加载+GPU预测
+    @tf.function(experimental_relax_shapes=True)
+    def predict_fn(batch):
+        return model(batch)
+
+    start_idx = 0
+    for batch in tqdm(dataset, total=(num_items // batch_size) + 1, desc="GPU预测"):
+        batch_vectors = predict_fn(batch).numpy()
+        end_idx = start_idx + len(batch_vectors)
+        vectors[start_idx:end_idx] = batch_vectors
+        start_idx = end_idx
+
+    return vectors
 
 
 def build_faiss_index(vectors, ids, output_dir="recall"):
     """GPU支持的索引构建"""
-    # ... (保持原样)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 使用Faiss GPU资源
+    res = faiss.StandardGpuResources()
+
+    # 归一化
+    faiss.normalize_L2(vectors)
+
+    # 根据数据规模自动选择索引
+    dim = vectors.shape[1]
+    if len(vectors) < 1_000_000:
+        # 小数据集使用精确搜索
+        cpu_index = faiss.IndexFlatIP(dim)
+        gpu_index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+    else:
+        # 大数据集使用IVF
+        nlist = min(10000, len(vectors) // 10)
+        quantizer = faiss.IndexFlatIP(dim)
+        cpu_index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+        gpu_index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+        gpu_index.train(vectors)  # GPU加速训练
+
+    gpu_index.add(vectors)
+
+    # 转回CPU索引保存
+    index = faiss.index_gpu_to_cpu(gpu_index)
+
+    # 版本化保存
+    timestamp = int(time.time())
+    index_path = f"{output_dir}/item_index_{timestamp}.faiss"
+    ids_path = f"{output_dir}/item_ids_{timestamp}.npy"
+
+    faiss.write_index(index, index_path)
+    np.save(ids_path, ids)
+
+    # 创建软链接
+    if os.path.exists(f"{output_dir}/item_index_latest.faiss"):
+        os.remove(f"{output_dir}/item_index_latest.faiss")
+    os.symlink(index_path, f"{output_dir}/item_index_latest.faiss")
+
+    return index_path, ids_path
 
 
 if __name__ == "__main__":
     # 配置路径
-    MODEL_PATH = "models/item_tower"
+    MODEL_PATH = "item_tower"  # 这是包含saved_model.pb的目录
     ITEM_DATA_PATH = "data/ad_feature.csv"
 
     try:
@@ -98,8 +189,8 @@ if __name__ == "__main__":
         item_data = pd.read_csv(ITEM_DATA_PATH)
         print(f"数据量: {len(item_data):,} 条")
 
-        # 2. 加载模型 - 现在支持Keras 3和旧格式
-        print("\n加载GPU优化模型...")
+        # 2. 加载模型
+        print("\n加载item_tower模型...")
         item_tower = load_item_model(MODEL_PATH)
 
         # 3. GPU向量生成
@@ -123,5 +214,5 @@ if __name__ == "__main__":
         print("1. 运行 nvidia-smi 检查GPU状态")
         print("2. 确认 tensorflow-gpu 版本与CUDA匹配")
         print("3. 尝试减小 batch_size 参数")
-        print("4. 检查模型格式是否为Keras 3支持的.keras或.h5格式")
-        print("5. 考虑使用 tf.keras.models.save_model(model, 'model.keras') 转换模型格式")
+        print("4. 检查模型目录结构是否正确")
+        print(f"5. 确认模型目录 {MODEL_PATH} 包含 saved_model.pb 和 variables 文件夹")
