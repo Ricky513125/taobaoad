@@ -25,7 +25,7 @@ if gpus:
 class SqueezeLayer(tf.keras.layers.Layer):
     """保持与您的模型完全一致"""
 
-    def __init__(self, axis=-1, ​ ** kwargs):
+    def __init__(self, axis=-1, **kwargs):
         super().__init__(**kwargs)
         self.axis = axis
 
