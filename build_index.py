@@ -33,4 +33,4 @@ index.add(item_vectors)
 
 # 保存索引和物料ID映射
 faiss.write_index(index, "recall/item_index.faiss")
-np.save("recall/item_ids.npy", item_data['item_id'].values)  # 假设物料有唯一ID
+np.save("recall/item_ids.npy", item_data['adgroup_id'].values)  # 假设物料有唯一ID
