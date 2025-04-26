@@ -34,46 +34,44 @@ class SqueezeLayer(tf.keras.layers.Layer):
 
 
 def load_item_model(model_path):
-    """加载训练好的item_tower模型"""
+    """改进的模型加载函数，解决变量引用问题"""
     try:
         # 显式指定GPU设备
         with tf.device('/GPU:0'):
             # 检查是否是SavedModel格式目录
             if os.path.isdir(model_path):
-                # 验证模型文件是否存在
-                required_files = ['saved_model.pb', 'keras_metadata.pb', 'variables']
-                if not all(os.path.exists(os.path.join(model_path, f)) for f in required_files):
-                    raise ValueError("SavedModel文件不完整")
-
                 print("加载SavedModel格式的item_tower...")
-                # 使用tf.saved_model.load加载模型
+
+                # 使用tf.saved_model.load加载模型并保留引用
                 model = tf.saved_model.load(model_path)
 
                 # 获取具体的签名
                 if 'serving_default' in model.signatures:
-                    serve = model.signatures['serving_default']
+                    # 将模型和签名存储在对象属性中
+                    class ModelWrapper:
+                        def __init__(self, model):
+                            self.model = model
+                            self.serve = model.signatures['serving_default']
 
-                    # 创建包装函数以匹配原始模型结构
-                    @tf.function
-                    def predict_fn(inputs):
-                        # 转换输入格式以匹配签名
-                        input_dict = {
-                            'adgroup_id': tf.cast(inputs['item_adgroup_id'], tf.int32),
-                            'cate_id': tf.cast(inputs['item_cate_id'], tf.int32),
-                            'campaign_id': tf.cast(inputs['item_campaign_id'], tf.int32),
-                            'customer': tf.cast(inputs['item_customer'], tf.int32),
-                            'brand': tf.cast(inputs['item_brand'], tf.float32),
-                            'price': inputs['item_price']
-                        }
-                        return serve(**input_dict)['output_0']
+                        @tf.function
+                        def __call__(self, inputs):
+                            input_dict = {
+                                'adgroup_id': tf.cast(inputs['item_adgroup_id'], tf.int32),
+                                'cate_id': tf.cast(inputs['item_cate_id'], tf.int32),
+                                'campaign_id': tf.cast(inputs['item_campaign_id'], tf.int32),
+                                'customer': tf.cast(inputs['item_customer'], tf.int32),
+                                'brand': tf.cast(inputs['item_brand'], tf.float32),
+                                'price': inputs['item_price']
+                            }
+                            return self.serve(**input_dict)['output_0']
 
-                    return predict_fn
+                    return ModelWrapper(model)
                 else:
                     raise ValueError("SavedModel中没有找到serving_default签名")
             else:
                 raise ValueError("模型路径不是有效的SavedModel目录")
     except Exception as e:
-        raise RuntimeError(f"模型加载失败: {str(e)}\n建议: 1. 检查模型路径 2. 确认模型格式")
+        raise RuntimeError(f"模型加载失败: {str(e)}")
 
 
 def create_dataset(item_data, batch_size=1024):
