@@ -184,25 +184,41 @@ class Trainer:
         self.processor.load_data()
         # print("=============", len(self.processor.user_feature_cols))
         self.processor.preprocess()
-        print("=============", len(self.processor.user_feature_cols))
+        # print("=============", len(self.processor.user_feature_cols))
         # 2. 准备训练数据（使用修正后的特征列）
         train_df, val_df = train_test_split(
             self.processor.train_data,
             test_size=0.2,
             random_state=42
         )
-        print("=============", len(self.processor.user_feature_cols))
+        # print("=============", len(self.processor.user_feature_cols))
         # 3. 训练模型
         self.model = DeepFMRerank(
             user_feat_dim=len(self.processor.user_feature_cols),
             item_feat_dim=len(self.processor.item_feature_cols)
         )
-        print("=============", len(self.processor.user_feature_cols))
+
+        # 在训练前添加最终维度检查
+        actual_user_feats = [col for col in self.processor.user_feature_cols
+                             if col in self.processor.train_data.columns]
+        actual_item_feats = [col for col in self.processor.item_feature_cols
+                             if col in self.processor.train_data.columns]
+
+        print("\n最终确认:")
+        print("用户特征列:", actual_user_feats)
+        print("物品特征列:", actual_item_feats)
+
+        if len(actual_user_feats) != 8:
+            raise ValueError(f"用户特征维度应为8，实际得到{len(actual_user_feats)}")
+        if len(actual_item_feats) != 4:
+            raise ValueError(f"物品特征维度应为4，实际得到{len(actual_item_feats)}")
+
+        # print("=============", len(self.processor.user_feature_cols))
         X_train = [
             train_df[self.processor.user_feature_cols].values,
             train_df[self.processor.item_feature_cols].values
         ]
-        print("=============", len(self.processor.user_feature_cols))
+        # print("=============", len(self.processor.user_feature_cols))
         y_train = train_df['clk'].values
 
         X_val = [
