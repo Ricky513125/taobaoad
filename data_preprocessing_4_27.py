@@ -17,7 +17,7 @@ def load_and_preprocess():
     # 合并数据
     raw_sample = raw_sample.rename({'user': 'user_id'})
     user_profile = user_profile.rename({'user': 'user_id'})
-    data = pd.merge(raw_sample, user_profile, how='left', on='userid')
+    data = pd.merge(raw_sample, user_profile, how='left', on='user_id')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
     # 处理缺失值
@@ -46,7 +46,7 @@ def load_and_preprocess_test():
     # 合并数据
     raw_sample = raw_sample.rename({'user': 'user_id'})
     user_profile = user_profile.rename({'user': 'user_id'})
-    data = pd.merge(raw_sample, user_profile, how='left', on='userid')
+    data = pd.merge(raw_sample, user_profile, how='left', on='user_id')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
     # 处理缺失值
