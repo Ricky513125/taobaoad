@@ -40,7 +40,7 @@ class RecallEvaluator:
     def evaluate(self, test_data_path, top_k_list=[10, 20, 50], output_dir="recall/results"):
         """执行评估流程"""
         os.makedirs(output_dir, exist_ok=True)
-        test_data = pd.read_csv(test_data_path)
+        test_data = pd.read_parquet(test_data_path)
         user_groups = test_data.groupby('user_id')
 
         # 预分配GPU内存
@@ -86,7 +86,7 @@ class RecallEvaluator:
                             'user_id': user_id,
                             'true_items': true_items.tolist(),
                             'pred_items': pred_items.tolist(),
-                        ​ ** metrics
+                        **metrics
                         })
                         results[f'top_{k}']['hit_rate'].append(metrics['hit'])
                         results[f'top_{k}']['precision'].append(metrics['precision'])
@@ -185,60 +185,60 @@ class RecallEvaluator:
                 }, f, indent=2)
             print(f"结果已保存到 {output_dir}")
 
-    class UserProfileAccessor:
-        """用户画像访问器（与之前相同）"""
+class UserProfileAccessor:
+    """用户画像访问器（与之前相同）"""
 
-        def __init__(self, profile_path):
-            self.profile_path = profile_path
-            self._init_data_source()
+    def __init__(self, profile_path):
+        self.profile_path = profile_path
+        self._init_data_source()
 
-        def _init_data_source(self):
-            if self.profile_path.endswith('.csv'):
-                self.profile_df = pd.read_csv(self.profile_path)
-                self.profile_df.set_index('user_id', inplace=True)
-                self.get_fn = self._get_from_dataframe
-            else:
-                raise ValueError("仅支持CSV文件")
+    def _init_data_source(self):
+        if self.profile_path.endswith('.csv'):
+            self.profile_df = pd.read_csv(self.profile_path)
+            self.profile_df.set_index('user_id', inplace=True)
+            self.get_fn = self._get_from_dataframe
+        else:
+            raise ValueError("仅支持CSV文件")
 
-        def get_user_features(self, user_id):
-            try:
-                user_data = self.profile_df.loc[user_id]
-                return {
-                    'cms_segid': int(user_data['cms_segid']),
-                    'cms_group_id': int(user_data['cms_group_id']),
-                    'final_gender_code': int(user_data['final_gender_code']),
-                    'age_level': int(user_data['age_level']),
-                    'pvalue_level': int(user_data['pvalue_level']),
-                    'shopping_level': int(user_data['shopping_level']),
-                    'new_user_class_level': int(user_data['new_user_class_level']),
-                    'occupation': float(user_data['occupation'])
-                }
-            except KeyError:
-                print(f"警告：用户 {user_id} 不在画像数据中")
-                return None
+    def get_user_features(self, user_id):
+        try:
+            user_data = self.profile_df.loc[user_id]
+            return {
+                'cms_segid': int(user_data['cms_segid']),
+                'cms_group_id': int(user_data['cms_group_id']),
+                'final_gender_code': int(user_data['final_gender_code']),
+                'age_level': int(user_data['age_level']),
+                'pvalue_level': int(user_data['pvalue_level']),
+                'shopping_level': int(user_data['shopping_level']),
+                'new_user_class_level': int(user_data['new_user_class_level']),
+                'occupation': float(user_data['occupation'])
+            }
+        except KeyError:
+            print(f"警告：用户 {user_id} 不在画像数据中")
+            return None
 
-    if __name__ == "__main__":
-        # 初始化评估器
-        evaluator = RecallEvaluator(
-            user_tower_path="user_tower",
-            item_tower_path="item_tower",
-            item_index_path="recall/item_index_latest.faiss",
-            item_ids_path="recall/item_ids_latest.npy",
-            user_profile_path="data/user_profile.csv"
-        )
+if __name__ == "__main__":
+    # 初始化评估器
+    evaluator = RecallEvaluator(
+        user_tower_path="user_tower",
+        item_tower_path="item_tower",
+        item_index_path="recall/item_index_latest.faiss",
+        item_ids_path="recall/item_ids_latest.npy",
+        user_profile_path="data/user_profile.csv"
+    )
 
-        # 执行评估
-        results = evaluator.evaluate(
-            test_data_path="test_data.csv",
-            top_k_list=[10, 20, 50],
-            output_dir="recall/results"
-        )
+    # 执行评估
+    results = evaluator.evaluate(
+        test_data_path="processed_data_test.parquet",
+        top_k_list=[10, 20, 50],
+        output_dir="recall/results"
+    )
 
-        # 打印结果摘要
-        print("\n召回测试结果摘要:")
-        for top_k, metrics in results.items():
-            print(f"\n--- {top_k} ---")
-            print(f"用户数: {metrics['num_users']}")
-            print(f"平均命中率: {metrics['hit_rate']:.2%}")
-            print(f"平均精度: {metrics['precision']:.4f}")
-            print(f"平均NDCG: {metrics['ndcg']:.4f}")
+    # 打印结果摘要
+    print("\n召回测试结果摘要:")
+    for top_k, metrics in results.items():
+        print(f"\n--- {top_k} ---")
+        print(f"用户数: {metrics['num_users']}")
+        print(f"平均命中率: {metrics['hit_rate']:.2%}")
+        print(f"平均精度: {metrics['precision']:.4f}")
+        print(f"平均NDCG: {metrics['ndcg']:.4f}")
