@@ -87,48 +87,7 @@ def create_dataset(data_path, batch_size=1024, neg_ratio=4, is_train=True):
         # 测试集：直接返回原始数据（不需要负采样）
         return dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-    # Batch内负采样
-    # def batch_neg_sampling(batch_features, batch_labels):
-    #     pos_mask = batch_labels == 1
-    #     pos_count = tf.reduce_sum(tf.cast(pos_mask, tf.int32))
-    #
-    #     # 正样本
-    #     pos_features = {
-    #         k: tf.boolean_mask(v, pos_mask)
-    #         for k, v in batch_features.items()
-    #     }
-    #
-    #     # 负样本(从同batch随机选择)
-    #     neg_indices = tf.random.shuffle(tf.range(tf.shape(batch_labels)[0]))[:pos_count * neg_ratio]
-    #     neg_features = {
-    #         k: tf.gather(v, neg_indices)
-    #         for k, v in batch_features.items()
-    #     }
-    #
-    #     # 合并正负样本
-    #     combined_features = {
-    #         k: tf.concat([pos_features[k], neg_features[k]], axis=0)
-    #         for k in batch_features.keys()
-    #     }
-    #     combined_labels = tf.concat([
-    #         tf.ones_like(batch_labels[:pos_count], dtype=tf.float32),
-    #         tf.zeros_like(batch_labels[:pos_count * neg_ratio], dtype=tf.float32)
-    #     ], axis=0)
-    #
-    #     # 打乱顺序
-    #     indices = tf.random.shuffle(tf.range(tf.shape(combined_labels)[0]))
-    #     return (
-    #         {k: tf.gather(v, indices) for k, v in combined_features.items()},
-    #         tf.gather(combined_labels, indices)
-    #     )
-    #
-    # return (dataset
-    #         .shuffle(100000)
-    #         .batch(batch_size)
-    #         .map(batch_neg_sampling, num_parallel_calls=tf.data.AUTOTUNE)
-    #         .prefetch(tf.data.AUTOTUNE))
-
-
+    
 if __name__ == "__main__":
     # 1. 构建模型
     user_tower = build_user_tower()
