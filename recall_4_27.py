@@ -70,8 +70,8 @@ class RecallEvaluator:
                     user_data = batch_users[user_id]
                     true_items = user_data['adgroup_id'].values
 
-                    # 使用嵌套进度条处理每个top_k
-                    for k in tqdm(top_k_list, desc=f"用户 {user_id[:8]}...", leave=False):
+                    # 处理每个top_k（移除嵌套进度条改为简单循环）
+                    for k in top_k_list:
                         # FAISS CPU搜索
                         distances, indices = self.index.search(
                             np.expand_dims(vector, axis=0).astype('float32'),
