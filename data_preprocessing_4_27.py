@@ -22,9 +22,9 @@ def load_and_preprocess():
     user_profile = user_profile.rename({'userid': 'user_id'}, axis=1)
     u = raw_sample[~raw_sample['user_id'].isin(user_profile.user_id)]
     print(u)
-    u.to_parquet('data/raw_sample_train_cold_user.parquet', u)
+    u.to_parquet('data/raw_sample_train_cold_user.parquet')
     a = raw_sample[~raw_sample['adgroup_id'].isin(ad_feature['adgroup_id'])]
-    a.to_parquet('data/raw_sample_train_cold_ad.parquet', a)
+    a.to_parquet('data/raw_sample_train_cold_ad.parquet')
     raw_sample = raw_sample[raw_sample['adgroup_id'].isin(ad_feature['adgroup_id']) & raw_sample['user_id'].isin(user_profile.user_id)]
     data = pd.merge(raw_sample, user_profile, how='left', on='user_id')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
@@ -58,9 +58,9 @@ def load_and_preprocess_test():
 
     u = raw_sample[~raw_sample['user_id'].isin(user_profile.user_id)]
     print(u)
-    u.to_parquet('data/raw_sample_test_cold_user.parquet', u)
+    u.to_parquet('data/raw_sample_test_cold_user.parquet')
     a = raw_sample[~raw_sample['adgroup_id'].isin(ad_feature['adgroup_id'])]
-    a.to_parquet('data/raw_sample_test_cold_ad.parquet', a)
+    a.to_parquet('data/raw_sample_test_cold_ad.parquet')
     raw_sample = raw_sample[
         raw_sample['adgroup_id'].isin(ad_feature['adgroup_id']) & raw_sample['user_id'].isin(user_profile.user_id)]
 
