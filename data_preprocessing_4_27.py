@@ -7,6 +7,7 @@ new_user_class_level 和广告的brand有nan值影响
 
 4.27 -2 发现有数据集合并后， sample表里有没出现过的userid，
 重新合并，将没有在表里的设为冷启动
+new_user_class_level  求掉尾部空格
 """
 
 def load_and_preprocess():
@@ -19,7 +20,7 @@ def load_and_preprocess():
 
     # 合并数据
     raw_sample = raw_sample.rename({'user': 'user_id'}, axis=1)
-    user_profile = user_profile.rename({'userid': 'user_id'}, axis=1)
+    user_profile = user_profile.rename({'userid': 'user_id', 'new_user_class_level ': 'new_user_class_level'}, axis=1)
     u = raw_sample[~raw_sample['user_id'].isin(user_profile.user_id)]
     print(u)
     u.to_parquet('data/raw_sample_train_cold_user.parquet')
@@ -33,7 +34,7 @@ def load_and_preprocess():
     data['pvalue_level'] = data['pvalue_level'].fillna(0).astype(int)  # 确保整数类型 # -1表示未知
     print(data.columns.tolist())
     # data['new_user_class_level'].fillna(0, inplace=True)
-    data['new_user_class_level'] = data['new_user_class_level '].fillna(0).astype(int)
+    data['new_user_class_level '] = data['new_user_class_level '].fillna(0).astype(int)
 
     # 处理异常值
     data['price'] = np.where(data['price'] <= 0, data['price'].median(), data['price'])
@@ -54,7 +55,7 @@ def load_and_preprocess_test():
 
     # 合并数据
     raw_sample = raw_sample.rename({'user': 'user_id'}, axis=1)
-    user_profile = user_profile.rename({'userid': 'user_id'}, axis=1)
+    user_profile = user_profile.rename({'userid': 'user_id', 'new_user_class_level ': 'new_user_class_level'}, axis=1)
 
     u = raw_sample[~raw_sample['user_id'].isin(user_profile.user_id)]
     print(u)
@@ -71,7 +72,7 @@ def load_and_preprocess_test():
     data['pvalue_level'] = data['pvalue_level'].fillna(0).astype(int)  # 确保整数类型 # -1表示未知
     print(data.columns.tolist())
     # data['new_user_class_level'].fillna(0, inplace=True)
-    data['new_user_class_level'] = data['new_user_class_level '].fillna(0).astype(int)
+    data['new_user_class_level'] = data['new_user_class_level'].fillna(0).astype(int)
     data['brand'] = data['brand'].fillna(0).astype(int)
     # 处理异常值
     data['price'] = np.where(data['price'] <= 0, data['price'].median(), data['price'])
