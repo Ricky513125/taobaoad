@@ -87,7 +87,7 @@ def create_dataset(data_path, batch_size=1024, neg_ratio=4, is_train=True):
         # 测试集：直接返回原始数据（不需要负采样）
         return dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-    
+
 if __name__ == "__main__":
     # 1. 构建模型
     user_tower = build_user_tower()
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     # 4. 训练配置
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath='checkpoints/model_{epoch:02d}.h5',
+        filepath='checkpoints/0427/model_{epoch:02d}.h5',
         save_weights_only=False,  # 保存完整模型
         monitor='val_auc',
         mode='max',
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     )
 
     # 5. 训练
-    train_ds = create_dataset('data/processed_data.parquet',is_train=True)
+    train_ds = create_dataset('data/processed_data3.parquet',is_train=True)
     test_ds = create_dataset('data/processed_data_test.parquet', is_train=False)  # 测试集
     history = model.fit(
         train_ds,
