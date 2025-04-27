@@ -44,14 +44,22 @@ def load_item_model(model_path):
 
                 # 使用tf.saved_model.load加载模型并保留引用
                 model = tf.saved_model.load(model_path)
+                serve = model.signatures['serving_default']
+
+                # 自动获取输入输出名称
+                input_names = list(serve.structured_input_signature[1].keys())
+                output_name = list(serve.structured_outputs.keys())[0]
 
                 # 获取具体的签名
                 if 'serving_default' in model.signatures:
                     # 将模型和签名存储在对象属性中
                     class ModelWrapper:
-                        def __init__(self, model):
-                            self.model = model
-                            self.serve = model.signatures['serving_default']
+                        def __init__(self, serve, input_names, output_name):
+                            # self.model = model
+                            # self.serve = model.signatures['serving_default']
+                            self.serve = serve
+                            self.input_names = input_names
+                            self.output_name = output_name
 
                         @tf.function
                         def __call__(self, inputs):
@@ -63,9 +71,10 @@ def load_item_model(model_path):
                                 'brand': tf.cast(inputs['item_brand'], tf.float32),
                                 'price': inputs['item_price']
                             }
-                            return self.serve(**input_dict)['output_0']
+                            return self.serve(**input_dict)[self.output_name]
+                            # return self.serve(**input_dict)['output_0']
 
-                    return ModelWrapper(model)
+                    return ModelWrapper(serve, input_names, output_name)
                 else:
                     raise ValueError("SavedModel中没有找到serving_default签名")
             else:
