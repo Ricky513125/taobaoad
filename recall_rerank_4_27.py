@@ -182,9 +182,9 @@ class Trainer:
         """完整训练评估流程"""
         # 1. 数据准备
         self.processor.load_data()
-        print("=============", len(self.processor.user_feature_cols))
+        # print("=============", len(self.processor.user_feature_cols))
         self.processor.preprocess()
-
+        print("=============", len(self.processor.user_feature_cols))
         # 2. 准备训练数据（使用修正后的特征列）
         train_df, val_df = train_test_split(
             self.processor.train_data,
