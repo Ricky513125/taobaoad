@@ -1,6 +1,11 @@
 import pandas as pd
 import numpy as np
+"""
+4.27 发现合并后的数据集里
+new_user_class_level 和广告的brand有nan值影响
+发现链接没有指定left
 
+"""
 
 def load_and_preprocess():
     """加载并预处理数据"""
@@ -10,8 +15,8 @@ def load_and_preprocess():
     raw_sample = pd.read_csv('data/raw_sample_train.csv')
 
     # 合并数据
-    data = pd.merge(raw_sample, user_profile, left_on='user', right_on='userid')
-    data = pd.merge(data, ad_feature, on='adgroup_id')
+    data = pd.merge(raw_sample, user_profile, how='left', left_on='user', right_on='userid')
+    data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
     # 处理缺失值
     data['pvalue_level'] = data['pvalue_level'].fillna(0).astype(int)  # 确保整数类型 # -1表示未知
@@ -21,7 +26,7 @@ def load_and_preprocess():
 
     # 处理异常值
     data['price'] = np.where(data['price'] <= 0, data['price'].median(), data['price'])
-
+    data['brand'] = data['brand'].fillna(0).astype(int)
     # 特征分桶
     def bucketize(series, num_buckets=10):
         return pd.qcut(series, num_buckets, labels=False, duplicates='drop')
@@ -37,15 +42,15 @@ def load_and_preprocess_test():
     raw_sample = pd.read_csv('data/raw_sample_test.csv')
 
     # 合并数据
-    data = pd.merge(raw_sample, user_profile, left_on='user', right_on='userid')
-    data = pd.merge(data, ad_feature, on='adgroup_id')
+    data = pd.merge(raw_sample, user_profile, how='left', left_on='user', right_on='userid')
+    data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
     # 处理缺失值
     data['pvalue_level'] = data['pvalue_level'].fillna(0).astype(int)  # 确保整数类型 # -1表示未知
     print(data.columns.tolist())
     # data['new_user_class_level'].fillna(0, inplace=True)
     data['new_user_class_level'] = data['new_user_class_level '].fillna(0).astype(int)
-
+    data['brand'] = data['brand'].fillna(0).astype(int)
     # 处理异常值
     data['price'] = np.where(data['price'] <= 0, data['price'].median(), data['price'])
 
@@ -58,6 +63,6 @@ def load_and_preprocess_test():
 
 if __name__ == "__main__":
     data = load_and_preprocess()
-    data.to_parquet('data/processed_data.parquet')  # 保存预处理数据
+    data.to_parquet('data/processed_data2.parquet')  # 保存预处理数据
     d = load_and_preprocess_test()
-    d.to_parquet('data/processed_data_test.parquet')
+    d.to_parquet('data/processed_data_test2.parquet')
