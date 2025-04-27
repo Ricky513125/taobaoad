@@ -182,6 +182,7 @@ class Trainer:
         """完整训练评估流程"""
         # 1. 数据准备
         self.processor.load_data()
+        print("=============", len(self.processor.user_feature_cols))
         self.processor.preprocess()
 
         # 2. 准备训练数据（使用修正后的特征列）
