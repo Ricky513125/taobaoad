@@ -1,3 +1,7 @@
+"""
+4.27 success
+"""
+
 import os
 import faiss
 import numpy as np
@@ -140,46 +144,51 @@ def generate_vectors_gpu(model, item_data, batch_size=8192):
 
 
 def build_faiss_index(vectors, ids, output_dir="recall"):
-    """GPU支持的索引构建"""
+    """纯CPU版本的索引构建"""
     os.makedirs(output_dir, exist_ok=True)
 
-    # 使用Faiss GPU资源
-    res = faiss.StandardGpuResources()
-
-    # 归一化
+    # 归一化向量（重要步骤）
     faiss.normalize_L2(vectors)
 
-    # 根据数据规模自动选择索引
+    # 根据数据规模自动选择索引类型
     dim = vectors.shape[1]
     if len(vectors) < 1_000_000:
         # 小数据集使用精确搜索
-        cpu_index = faiss.IndexFlatIP(dim)
-        gpu_index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+        index = faiss.IndexFlatIP(dim)  # 内积距离
+        print("使用精确搜索(IndexFlatIP)")
     else:
-        # 大数据集使用IVF
-        nlist = min(10000, len(vectors) // 10)
-        quantizer = faiss.IndexFlatIP(dim)
-        cpu_index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
-        gpu_index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
-        gpu_index.train(vectors)  # GPU加速训练
+        # 大数据集使用IVF近似搜索
+        nlist = min(10000, len(vectors) // 10)  # 聚类中心数
+        quantizer = faiss.IndexFlatIP(dim)  # 量化器
+        index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+        print(f"使用IVF近似搜索，nlist={nlist}")
 
-    gpu_index.add(vectors)
+        # 需要先训练索引
+        print("训练索引中...")
+        index.train(vectors)
 
-    # 转回CPU索引保存
-    index = faiss.index_gpu_to_cpu(gpu_index)
+    # 添加向量到索引
+    print("添加向量到索引...")
+    index.add(vectors)
+    print(f"索引构建完成，包含 {index.ntotal} 个向量")
 
     # 版本化保存
     timestamp = int(time.time())
-    index_path = f"{output_dir}/item_index_{timestamp}.faiss"
-    ids_path = f"{output_dir}/item_ids_{timestamp}.npy"
+    index_path = os.path.join(output_dir, f"item_index_{timestamp}.faiss")
+    ids_path = os.path.join(output_dir, f"item_ids_{timestamp}.npy")
 
+    # 保存索引和ID映射
     faiss.write_index(index, index_path)
     np.save(ids_path, ids)
+    print(f"索引已保存到: {index_path}")
+    print(f"ID映射已保存到: {ids_path}")
 
-    # 创建软链接
-    if os.path.exists(f"{output_dir}/item_index_latest.faiss"):
-        os.remove(f"{output_dir}/item_index_latest.faiss")
-    os.symlink(index_path, f"{output_dir}/item_index_latest.faiss")
+    # 创建最新版本的软链接
+    latest_index_path = os.path.join(output_dir, "item_index_latest.faiss")
+    if os.path.exists(latest_index_path):
+        os.remove(latest_index_path)
+    os.symlink(os.path.basename(index_path), latest_index_path)
+    print(f"创建软链接: {latest_index_path} -> {os.path.basename(index_path)}")
 
     return index_path, ids_path
 
