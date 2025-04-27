@@ -155,6 +155,23 @@ def generate_item_sequences(behavior_path, output_path, walks_per_node=5, use_gp
 
     return G
 
+
+def generate_user_sequences_fast(behavior_path, output_path):
+    print("Loading data to memory...")
+    df = pd.read_csv(
+        behavior_path,
+        dtype={'user': 'int32', 'cate': 'int16', 'brand': 'int16', 'time_stamp': 'int32'}
+    )
+
+    print("Sorting and grouping...")
+    df = df.sort_values(['user', 'time_stamp'])
+    df['item_pair'] = df['cate'].astype(str) + ',' + df['brand'].astype(str)
+    sequences = df.groupby('user')['item_pair'].agg('|'.join).reset_index()
+
+    print("Saving...")
+    sequences.to_csv(output_path, index=False, header=['user', 'hist_sequence'])
+    print(f"Done! Saved to {output_path}")
+
 if __name__ == "__main__":
     # 配置路径
     os.makedirs("../data", exist_ok=True)
@@ -165,7 +182,7 @@ if __name__ == "__main__":
 
     try:
         # 生成用户序列
-        generate_user_sequences_optimized(behavior_path, user_seq_path)
+        generate_user_sequences_fast(behavior_path, user_seq_path)
 
         # 生成物品序列和图
         G = generate_item_sequences(behavior_path, item_seq_path,use_gpu=GPU_AVAILABLE)
