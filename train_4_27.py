@@ -1,6 +1,11 @@
 import tensorflow as tf
 import pandas as pd
 from model import build_user_tower, build_item_tower
+"""
+4.27 合并数据集清除空值
+重新训练
+
+"""
 
 # GPU配置
 gpus = tf.config.list_physical_devices('GPU')
@@ -128,7 +133,7 @@ if __name__ == "__main__":
 
     # 5. 训练
     train_ds = create_dataset('data/processed_data3.parquet',is_train=True)
-    test_ds = create_dataset('data/processed_data_test.parquet', is_train=False)  # 测试集
+    test_ds = create_dataset('data/processed_data_test3.parquet', is_train=False)  # 测试集
     history = model.fit(
         train_ds,
         validation_data=test_ds,  # 加入测试集作为验证集
@@ -141,6 +146,6 @@ if __name__ == "__main__":
     print(f"\nTest AUC: {test_auc:.4f}")
 
     # 6. 保存最终模型
-    model.save('final_model')
-    user_tower.save('user_tower')
-    item_tower.save('item_tower')
+    model.save('results/0427embed/final_model')
+    user_tower.save('results/0427embed/user_tower')
+    item_tower.save('results/0427embed/item_tower')
