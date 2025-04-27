@@ -21,86 +21,38 @@ if gpus:
 
 
 class DataProcessor:
-    """数据处理管道（修正版）"""
+    """简化版数据处理管道（使用预合并数据）"""
 
     def __init__(self):
-        self.user_features = None
-        self.item_features = None
         self.train_data = None
         self.test_data = None
-
-    def clean_columns(self, df):
-        """清洗列名：去除空格并标准化"""
-        df.columns = [col.strip() for col in df.columns]
-        return df
+        # 明确定义特征列（需与合并后的列名一致）
+        self.user_feature_cols = [
+            'cms_segid', 'cms_group_id', 'final_gender_code',
+            'age_level', 'pvalue_level', 'shopping_level',
+            'occupation', 'new_user_class_level'
+        ]
+        self.item_feature_cols = [
+            'cate_id', 'campaign_id', 'brand', 'price'
+        ]
 
     def load_data(self):
-        """加载所有原始数据（修正列名问题）"""
-        with tqdm(total=4, desc="加载数据") as pbar:
-            # 用户特征（自动去除列名空格）
-            self.user_features = self.clean_columns(pd.read_parquet("data/user.parquet"))
+        """直接加载预合并的数据"""
+        with tqdm(total=2, desc="加载数据") as pbar:
+            self.train_data = pd.read_parquet("data/combined_train.parquet")
+            pbar.update(1)
+            self.test_data = pd.read_parquet("data/combined_test.parquet")
             pbar.update(1)
 
-            # 广告特征
-            self.item_features = self.clean_columns(pd.read_csv("data/ad_feature.csv"))
-            self.item_features.rename(columns={'adgroup_id': 'item_id'}, inplace=True)
-            pbar.update(1)
+        # 验证列名
+        self._validate_columns()
 
-            # 训练数据
-            self.train_data = self.clean_columns(pd.read_parquet("data/processed_data_train.parquet"))
-            pbar.update(1)
-
-            # 测试数据
-            self.test_data = self.clean_columns(pd.read_parquet("data/processed_data_test.parquet"))
-            pbar.update(1)
-
-    def preprocess(self):
-        """修正后的数据预处理方法"""
-        with tqdm(total=3, desc="数据预处理") as pbar:
-            # 用户特征处理
-            self.user_features['user_id'] = self.user_features['userid'].astype(int)
-            self.user_features.set_index('userid', inplace=True)
-
-            # 确保用户特征列名唯一
-            self.user_feature_cols = [
-                'cms_segid', 'cms_group_id', 'final_gender_code',
-                'age_level', 'pvalue_level', 'shopping_level',
-                'occupation', 'new_user_class_level'
-            ]
-            self.user_features = self.user_features[self.user_feature_cols]
-
-            # 物品特征处理
-            self.item_features['item_id'] = self.item_features['item_id'].astype(int)
-            self.item_features.set_index('item_id', inplace=True)
-
-            # 确保物品特征列名唯一
-            self.item_feature_cols = [
-                'cate_id', 'campaign_id', 'brand', 'price'
-            ]
-            self.item_features = self.item_features[self.item_feature_cols]
-
-            # 关键修改：合并时明确区分来源
-            self.train_data = (
-                self.train_data
-                .merge(
-                    self.user_features,
-                    left_on='user',
-                    right_index=True,
-                    how='left',
-                    suffixes=('', '_user')
-                )
-                .merge(
-                    self.item_features,
-                    left_on='adgroup_id',
-                    right_index=True,
-                    how='left',
-                    suffixes=('', '_item')
-                )
-            )
-
-            # 验证合并后的列名
-            print("\n合并后的列名:", self.train_data.columns.tolist())
-            pbar.update(1)
+    def _validate_columns(self):
+        """验证合并后的数据包含所有需要的列"""
+        required_cols = set(self.user_feature_cols + self.item_feature_cols + ['clk'])
+        missing_cols = required_cols - set(self.train_data.columns)
+        if missing_cols:
+            raise ValueError(f"合并后的数据缺失以下列: {missing_cols}")
 
 
 class DeepFMRerank:
@@ -186,50 +138,27 @@ class Trainer:
         self.model = None
 
     def run(self):
-        """完整训练评估流程"""
-        # 1. 数据准备
+        # 1. 加载预合并数据
         self.processor.load_data()
-        # print("=============", len(self.processor.user_feature_cols))
-        self.processor.preprocess()
-        # print("=============", len(self.processor.user_feature_cols))
-        # 2. 准备训练数据（使用修正后的特征列）
+
+        # 2. 划分训练/验证集
         train_df, val_df = train_test_split(
             self.processor.train_data,
             test_size=0.2,
             random_state=42
         )
-        # print("=============", len(self.processor.user_feature_cols))
-        # 3. 训练模型
+
+        # 3. 初始化模型
         self.model = DeepFMRerank(
             user_feat_dim=len(self.processor.user_feature_cols),
             item_feat_dim=len(self.processor.item_feature_cols)
         )
 
-        # # 在训练前添加最终维度检查
-        # actual_user_feats = [col for col in self.processor.user_feature_cols
-        #                      if col in self.processor.train_data.columns]
-        # actual_item_feats = [col for col in self.processor.item_feature_cols
-        #                      if col in self.processor.train_data.columns]
-        #
-        # print("\n最终确认:")
-        # print("用户特征列:", actual_user_feats)
-        # print("物品特征列:", actual_item_feats)
-
-        # if len(actual_user_feats) != 8:
-        #     raise ValueError(f"用户特征维度应为8，实际得到{len(actual_user_feats)}")
-        # if len(actual_item_feats) != 4:
-        #     raise ValueError(f"物品特征维度应为4，实际得到{len(actual_item_feats)}")
-
-        # print("=============", len(self.processor.user_feature_cols))
-        # X_train = [
-        #     train_df[self.processor.user_feature_cols].values,
-        #     train_df[self.processor.item_feature_cols].values
-        # ]
+        # 4. 准备输入数据
         X_train = [
-            train_df[[col for col in self.processor.user_feature_cols]].values,
-            train_df[[col for col in self.processor.item_feature_cols]].values
+            train_df[self.processor.user_feature_cols].values,
+            train_df[self.processor.item_feature_cols].values
         ]
-        # print("=============", len(self.processor.user_feature_cols))
         y_train = train_df['clk'].values
 
         X_val = [
@@ -238,21 +167,15 @@ class Trainer:
         ]
         y_val = val_df['clk'].values
 
+        # 5. 训练和评估
         print("\n训练数据统计:")
-        print(X_train[0][0])
         print(f"用户特征维度: {X_train[0].shape}")
         print(f"物品特征维度: {X_train[1].shape}")
         print(f"正样本比例: {y_train.mean():.2%}")
 
         history = self.model.train(X_train, y_train, X_val, y_val)
 
-        # 4. 验证集评估
-        val_metrics, _ = self.model.evaluate(X_val, y_val)
-        print("\n验证集评估结果:")
-        for k, v in val_metrics.items():
-            print(f"{k}: {v:.4f}")
-
-        # 5. 测试集评估
+        # 6. 测试集评估
         X_test = [
             self.processor.test_data[self.processor.user_feature_cols].values,
             self.processor.test_data[self.processor.item_feature_cols].values
@@ -264,7 +187,7 @@ class Trainer:
         for k, v in test_metrics.items():
             print(f"{k}: {v:.4f}")
 
-        # 6. 保存结果
+        # 7. 保存结果
         self.save_results(history, test_metrics, y_test, y_pred)
 
     def save_results(self, history, metrics, y_true, y_pred):
