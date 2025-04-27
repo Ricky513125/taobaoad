@@ -7,6 +7,7 @@ from tqdm import tqdm
 import networkx as nx
 from collections import defaultdict
 import pickle
+import time
 try:
     import cupy as cp
     GPU_AVAILABLE = True
@@ -172,6 +173,67 @@ def generate_user_sequences_fast(behavior_path, output_path):
     sequences.to_csv(output_path, index=False, header=['user', 'hist_sequence'])
     print(f"Done! Saved to {output_path}")
 
+
+def generate_user_sequences_streaming(behavior_path, output_path, chunk_size=50_000):
+    print("Processing in chunks...")
+
+    # 初始化进度条
+    pbar_total = None
+    start_time = time.time()
+
+    # 第一次遍历：收集所有用户（带进度条）
+    print("🔍 Scanning all users...")
+    chunks = pd.read_csv(behavior_path, chunksize=chunk_size, usecols=['user'])
+    unique_users = set()
+
+    # 先计算总chunk数用于进度条
+    with open(behavior_path, 'r') as f:
+        total_chunks = sum(1 for _ in f) // chunk_size + 1
+
+    with tqdm(total=total_chunks, desc="Scanning chunks") as pbar:
+        for chunk in chunks:
+            unique_users.update(chunk['user'].unique())
+            pbar.update(1)
+
+    unique_users = sorted(unique_users)
+    user_count = len(unique_users)
+    print(f"✅ Found {user_count} unique users")
+
+    # 第二次遍历：处理用户（带动态预估）
+    writer = open(output_path, 'w')
+    writer.write("user,hist_sequence\n")
+
+    print("🔄 Processing user sequences...")
+    with tqdm(total=user_count, desc="Users processed", unit='user',
+              bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [ETA:{remaining}]") as user_pbar:
+
+        for i, user in enumerate(unique_users):
+            user_start_time = time.time()
+            chunks = pd.read_csv(
+                behavior_path,
+                chunksize=chunk_size,
+                dtype={'user': 'int32', 'cate': 'int16', 'brand': 'int16', 'time_stamp': 'int32'}
+            )
+            user_sequences = []
+
+            for chunk in chunks:
+                chunk = chunk[chunk['user'] == user]
+                if not chunk.empty:
+                    chunk_sorted = chunk.sort_values('time_stamp')
+                    seq = '|'.join(f"{row['cate']},{row['brand']}" for _, row in chunk_sorted.iterrows())
+                    user_sequences.append(seq)
+
+            if user_sequences:
+                writer.write(f"{user},{'|'.join(user_sequences)}\n")
+
+            # 动态更新进度条信息
+            user_pbar.set_postfix({
+                'Speed': f"{1 / (time.time() - user_start_time):.1f} users/s",
+                'Current User': user
+            })
+            user_pbar.update(1)
+
+
 if __name__ == "__main__":
     # 配置路径
     os.makedirs("../data", exist_ok=True)
@@ -182,7 +244,7 @@ if __name__ == "__main__":
 
     try:
         # 生成用户序列
-        generate_user_sequences_fast(behavior_path, user_seq_path)
+        generate_user_sequences_streaming(behavior_path, user_seq_path)
 
         # 生成物品序列和图
         G = generate_item_sequences(behavior_path, item_seq_path,use_gpu=GPU_AVAILABLE)
