@@ -191,17 +191,18 @@ class Trainer:
             test_size=0.2,
             random_state=42
         )
-
+        print("=============", len(self.processor.user_feature_cols))
         # 3. 训练模型
         self.model = DeepFMRerank(
             user_feat_dim=len(self.processor.user_feature_cols),
             item_feat_dim=len(self.processor.item_feature_cols)
         )
-
+        print("=============", len(self.processor.user_feature_cols))
         X_train = [
             train_df[self.processor.user_feature_cols].values,
             train_df[self.processor.item_feature_cols].values
         ]
+        print("=============", len(self.processor.user_feature_cols))
         y_train = train_df['clk'].values
 
         X_val = [
