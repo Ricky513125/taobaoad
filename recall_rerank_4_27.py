@@ -1,10 +1,9 @@
 import os
 import numpy as np
 import pandas as pd
-import tensorflow as tf
-import faiss
-import json
 import matplotlib.pyplot as plt
+import tensorflow as tf
+import json
 from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Dot, BatchNormalization
@@ -22,7 +21,7 @@ if gpus:
 
 
 class DataProcessor:
-    """数据处理管道"""
+    """数据处理管道（修正版）"""
 
     def __init__(self):
         self.user_features = None
@@ -30,54 +29,75 @@ class DataProcessor:
         self.train_data = None
         self.test_data = None
 
+    def clean_columns(self, df):
+        """清洗列名：去除空格并标准化"""
+        df.columns = [col.strip() for col in df.columns]
+        return df
+
     def load_data(self):
-        """加载所有原始数据"""
+        """加载所有原始数据（修正列名问题）"""
         with tqdm(total=4, desc="加载数据") as pbar:
-            # 用户特征
-            self.user_features = pd.read_parquet("data/user.parquet")
+            # 用户特征（自动去除列名空格）
+            self.user_features = self.clean_columns(pd.read_parquet("data/user.parquet"))
             pbar.update(1)
 
             # 广告特征
-            self.item_features = pd.read_csv("data/ad_feature.csv")
+            self.item_features = self.clean_columns(pd.read_csv("data/ad_feature.csv"))
             self.item_features.rename(columns={'adgroup_id': 'item_id'}, inplace=True)
             pbar.update(1)
 
             # 训练数据
-            self.train_data = pd.read_parquet("data/processed_data_train.parquet")
+            self.train_data = self.clean_columns(pd.read_parquet("data/processed_data_train.parquet"))
             pbar.update(1)
 
             # 测试数据
-            self.test_data = pd.read_parquet("data/processed_data_test.parquet")
+            self.test_data = self.clean_columns(pd.read_parquet("data/processed_data_test.parquet"))
             pbar.update(1)
 
     def preprocess(self):
-        """数据预处理"""
+        """数据预处理（解决列名冲突）"""
         with tqdm(total=3, desc="数据预处理") as pbar:
             # 用户特征处理
-            print("用户特征列:", self.user_features.columns.tolist())  # 添加这行
             self.user_features['user_id'] = self.user_features['userid'].astype(int)
             self.user_features.set_index('userid', inplace=True)
+
+            # 指定需要保留的用户特征列
+            self.user_feature_cols = [
+                'cms_segid', 'cms_group_id', 'final_gender_code',
+                'age_level', 'pvalue_level', 'shopping_level',
+                'occupation', 'new_user_class_level'
+            ]
             pbar.update(1)
 
             # 物品特征处理
-            print("物品特征列:", self.item_features.columns.tolist())  # 添加这行
             self.item_features['item_id'] = self.item_features['item_id'].astype(int)
             self.item_features.set_index('item_id', inplace=True)
+
+            # 指定需要保留的物品特征列
+            self.item_feature_cols = [
+                'cate_id', 'campaign_id', 'brand', 'price'
+            ]
             pbar.update(1)
 
-            # 合并点击日志
-            print("训练数据列:", self.train_data.columns.tolist())  # 添加这行
+            # 合并点击日志（解决列名冲突）
             self.train_data = self.train_data.merge(
-                self.user_features, left_on='user', right_index=True, how='left'
+                self.user_features[self.user_feature_cols],
+                left_on='user',
+                right_index=True,
+                how='left',
+                suffixes=('', '_user')
             ).merge(
-                self.item_features, left_on='adgroup_id', right_index=True, how='left'
+                self.item_features[self.item_feature_cols],
+                left_on='adgroup_id',
+                right_index=True,
+                how='left',
+                suffixes=('', '_item')
             )
-            print("合并后列:", self.train_data.columns.tolist())  # 添加这行
             pbar.update(1)
 
 
 class DeepFMRerank:
-    """DeepFM精排模型"""
+    """DeepFM精排模型（修正版）"""
 
     def __init__(self, user_feat_dim, item_feat_dim):
         self.user_feat_dim = user_feat_dim
@@ -134,19 +154,16 @@ class DeepFMRerank:
 
     def evaluate(self, X_test, y_test):
         """模型评估"""
-        # 预测CTR
         y_pred = self.model.predict(X_test, batch_size=4096).flatten()
 
-        # 计算指标
         metrics = {
             'AUC': roc_auc_score(y_test, y_pred),
             'NDCG@10': self.calculate_ndcg(y_test, y_pred, k=10),
-            'Precision@10': precision_score(y_test, (y_pred > 0.5).astype(int))
+            'Precision@10': precision_score(y_test, (y_pred > 0.5).astype(int), zero_division=0)
         }
         return metrics, y_pred
 
     def calculate_ndcg(self, y_true, y_pred, k=10):
-        """计算NDCG指标"""
         top_k_idx = np.argsort(y_pred)[-k:]
         sorted_labels = y_true[top_k_idx]
         ideal_labels = np.sort(y_true)[-k:]
@@ -154,7 +171,7 @@ class DeepFMRerank:
 
 
 class Trainer:
-    """训练评估管道"""
+    """训练评估管道（修正版）"""
 
     def __init__(self):
         self.processor = DataProcessor()
@@ -166,17 +183,7 @@ class Trainer:
         self.processor.load_data()
         self.processor.preprocess()
 
-        # 获取实际存在的特征列名
-        user_cols = [col for col in self.processor.user_features.columns
-                     if col in self.processor.train_data.columns]
-        item_cols = [col for col in self.processor.item_features.columns
-                     if col in self.processor.train_data.columns]
-
-        print("使用的用户特征列:", user_cols)
-        print("使用的物品特征列:", item_cols)
-
-
-        # 2. 准备训练数据
+        # 2. 准备训练数据（使用修正后的特征列）
         train_df, val_df = train_test_split(
             self.processor.train_data,
             test_size=0.2,
@@ -185,21 +192,26 @@ class Trainer:
 
         # 3. 训练模型
         self.model = DeepFMRerank(
-            user_feat_dim=len(user_cols),
-            item_feat_dim=len(item_cols)
+            user_feat_dim=len(self.processor.user_feature_cols),
+            item_feat_dim=len(self.processor.item_feature_cols)
         )
 
         X_train = [
-            train_df[user_cols].values,
-            train_df[item_cols].values
+            train_df[self.processor.user_feature_cols].values,
+            train_df[self.processor.item_feature_cols].values
         ]
         y_train = train_df['clk'].values
 
         X_val = [
-            val_df[user_cols].values,
-            val_df[item_cols].values
+            val_df[self.processor.user_feature_cols].values,
+            val_df[self.processor.item_feature_cols].values
         ]
         y_val = val_df['clk'].values
+
+        print("\n训练数据统计:")
+        print(f"用户特征维度: {X_train[0].shape}")
+        print(f"物品特征维度: {X_train[1].shape}")
+        print(f"正样本比例: {y_train.mean():.2%}")
 
         history = self.model.train(X_train, y_train, X_val, y_val)
 
@@ -211,8 +223,8 @@ class Trainer:
 
         # 5. 测试集评估
         X_test = [
-            self.processor.test_data[self.processor.user_features.columns].values,
-            self.processor.test_data[self.processor.item_features.columns].values
+            self.processor.test_data[self.processor.user_feature_cols].values,
+            self.processor.test_data[self.processor.item_feature_cols].values
         ]
         y_test = self.processor.test_data['clk'].values
 
@@ -221,47 +233,42 @@ class Trainer:
         for k, v in test_metrics.items():
             print(f"{k}: {v:.4f}")
 
-        # 6. 可视化结果
-        self.plot_results(history, y_test, y_pred)
+        # 6. 保存结果
+        self.save_results(history, test_metrics, y_test, y_pred)
 
-    def plot_results(self, history, y_true, y_pred):
-        """可视化评估结果"""
-        plt.figure(figsize=(15, 5))
+    def save_results(self, history, metrics, y_true, y_pred):
+        """保存评估结果"""
+        os.makedirs("results", exist_ok=True)
 
-        # 训练曲线
-        plt.subplot(1, 3, 1)
+        # 保存指标
+        with open("results/metrics.json", "w") as f:
+            json.dump(metrics, f, indent=2)
+
+        # 保存预测结果
+        pd.DataFrame({
+            'true': y_true,
+            'pred': y_pred
+        }).to_csv("results/predictions.csv", index=False)
+
+        # 绘制训练曲线
+        plt.figure(figsize=(12, 4))
+        plt.subplot(1, 2, 1)
         plt.plot(history.history['AUC'], label='Train AUC')
         plt.plot(history.history['val_AUC'], label='Val AUC')
         plt.title('Model AUC')
-        plt.ylabel('AUC')
-        plt.xlabel('Epoch')
         plt.legend()
 
-        # CTR分布
-        plt.subplot(1, 3, 2)
-        plt.hist(y_pred[y_true == 1], bins=30, alpha=0.5, label='Positive')
-        plt.hist(y_pred[y_true == 0], bins=30, alpha=0.5, label='Negative')
-        plt.title('CTR Distribution')
+        plt.subplot(1, 2, 2)
+        plt.plot(history.history['loss'], label='Train Loss')
+        plt.plot(history.history['val_loss'], label='Val Loss')
+        plt.title('Model Loss')
         plt.legend()
-
-        # 混淆矩阵
-        plt.subplot(1, 3, 3)
-        conf_matrix = tf.math.confusion_matrix(
-            y_true, (y_pred > 0.5).astype(int)
-        ).numpy()
-        plt.imshow(conf_matrix, cmap='Blues')
-        plt.title('Confusion Matrix')
-        plt.colorbar()
 
         plt.tight_layout()
-        plt.savefig('results/evaluation_metrics.png')
+        plt.savefig('results/training_curve.png')
         plt.close()
 
 
 if __name__ == "__main__":
-    # 创建结果目录
-    os.makedirs("results", exist_ok=True)
-
-    # 运行训练评估流程
     trainer = Trainer()
     trainer.run()
