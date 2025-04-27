@@ -39,9 +39,9 @@ class DataProcessor:
     def load_data(self):
         """直接加载预合并的数据"""
         with tqdm(total=2, desc="加载数据") as pbar:
-            self.train_data = pd.read_parquet("data/processed_data.parquet")
+            self.train_data = pd.read_parquet("data/processed_data2.parquet")
             pbar.update(1)
-            self.test_data = pd.read_parquet("data/processed_data_test.parquet")
+            self.test_data = pd.read_parquet("data/processed_data_test2.parquet")
             pbar.update(1)
         print(self.train_data.shape)
         print(self.test_data.shape)
