@@ -34,7 +34,7 @@ class SqueezeLayer(tf.keras.layers.Layer):
 
 
 def load_item_model(model_path):
-    """改进的模型加载函数，解决变量引用问题"""
+    """完全修复变量引用问题的模型加载函数"""
     try:
         # 显式指定GPU设备
         with tf.device('/GPU:0'):
@@ -42,41 +42,40 @@ def load_item_model(model_path):
             if os.path.isdir(model_path):
                 print("加载SavedModel格式的item_tower...")
 
-                # 使用tf.saved_model.load加载模型并保留引用
+                # 使用tf.saved_model.load加载模型
                 model = tf.saved_model.load(model_path)
-                serve = model.signatures['serving_default']
 
-                # 自动获取输入输出名称
-                input_names = list(serve.structured_input_signature[1].keys())
-                output_name = list(serve.structured_outputs.keys())[0]
-
-                # 获取具体的签名
-                if 'serving_default' in model.signatures:
-                    # 将模型和签名存储在对象属性中
-                    class ModelWrapper:
-                        def __init__(self, serve, input_names, output_name):
-                            # self.model = model
-                            # self.serve = model.signatures['serving_default']
-                            self.serve = serve
-                            self.input_names = input_names
-                            self.output_name = output_name
-
-                        @tf.function
-                        def __call__(self, inputs):
-                            input_dict = {
-                                'adgroup_id': tf.cast(inputs['item_adgroup_id'], tf.int32),
-                                'cate_id': tf.cast(inputs['item_cate_id'], tf.int32),
-                                'campaign_id': tf.cast(inputs['item_campaign_id'], tf.int32),
-                                'customer': tf.cast(inputs['item_customer'], tf.int32),
-                                'brand': tf.cast(inputs['item_brand'], tf.float32),
-                                'price': inputs['item_price']
-                            }
-                            return self.serve(**input_dict)[self.output_name]
-                            # return self.serve(**input_dict)['output_0']
-
-                    return ModelWrapper(serve, input_names, output_name)
-                else:
+                # 获取serving签名并确保持久化
+                if 'serving_default' not in model.signatures:
                     raise ValueError("SavedModel中没有找到serving_default签名")
+
+                serve = model.signatures['serving_default']
+                output_name = list(serve.structured_outputs.keys())[0]
+                input_names = list(serve.structured_input_signature[1].keys())
+
+                # 创建持久化包装类
+                class ModelWrapper:
+                    def __init__(self, model, serve, output_name):
+                        # 关键：将模型和签名存储在实例属性中
+                        self._model = model  # 保持模型引用
+                        self._serve = serve  # 保持签名引用
+                        self._output_name = output_name
+
+                    @tf.function
+                    def __call__(self, inputs):
+                        # 构建输入字典（根据实际输入调整）
+                        input_dict = {
+                            'adgroup_id': tf.cast(inputs['item_adgroup_id'], tf.int32),
+                            'cate_id': tf.cast(inputs['item_cate_id'], tf.int32),
+                            'campaign_id': tf.cast(inputs['item_campaign_id'], tf.int32),
+                            'customer': tf.cast(inputs['item_customer'], tf.int32),
+                            'brand': tf.cast(inputs['item_brand'], tf.float32),
+                            'price': inputs['item_price']
+                        }
+                        # 确保使用持久化的serve引用
+                        return self._serve(**input_dict)[self._output_name]
+
+                return ModelWrapper(model, serve, output_name)
             else:
                 raise ValueError("模型路径不是有效的SavedModel目录")
     except Exception as e:
