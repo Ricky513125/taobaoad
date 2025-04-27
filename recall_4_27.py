@@ -195,7 +195,7 @@ class UserProfileAccessor:
     def _init_data_source(self):
         if self.profile_path.endswith('.csv'):
             self.profile_df = pd.read_csv(self.profile_path)
-            self.profile_df.set_index('user_id', inplace=True)
+            self.profile_df.set_index('userid', inplace=True)
             self.get_fn = self._get_from_dataframe
         else:
             raise ValueError("仅支持CSV文件")
@@ -211,7 +211,7 @@ class UserProfileAccessor:
                 'pvalue_level': int(user_data['pvalue_level']),
                 'shopping_level': int(user_data['shopping_level']),
                 'new_user_class_level': int(user_data['new_user_class_level']),
-                'occupation': float(user_data['occupation'])
+                'occupation': int(user_data['occupation'])
             }
         except KeyError:
             print(f"警告：用户 {user_id} 不在画像数据中")
