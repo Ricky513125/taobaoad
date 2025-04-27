@@ -103,6 +103,7 @@ class DeepFMRerank:
         self.user_feat_dim = user_feat_dim
         self.item_feat_dim = item_feat_dim
         self.model = self._build_model()
+        print(f"\n初始化模型: 用户特征维度={user_feat_dim}, 物品特征维度={item_feat_dim}")
 
     def _build_model(self):
         """构建DeepFM模型"""
@@ -145,7 +146,7 @@ class DeepFMRerank:
         history = self.model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
-            epochs=20,
+            epochs=100,
             batch_size=4096,
             callbacks=callbacks,
             verbose=1
