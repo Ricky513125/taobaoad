@@ -54,21 +54,25 @@ class DataProcessor:
         """数据预处理"""
         with tqdm(total=3, desc="数据预处理") as pbar:
             # 用户特征处理
+            print("用户特征列:", self.user_features.columns.tolist())  # 添加这行
             self.user_features['user_id'] = self.user_features['userid'].astype(int)
             self.user_features.set_index('userid', inplace=True)
             pbar.update(1)
 
             # 物品特征处理
+            print("物品特征列:", self.item_features.columns.tolist())  # 添加这行
             self.item_features['item_id'] = self.item_features['item_id'].astype(int)
             self.item_features.set_index('item_id', inplace=True)
             pbar.update(1)
 
             # 合并点击日志
+            print("训练数据列:", self.train_data.columns.tolist())  # 添加这行
             self.train_data = self.train_data.merge(
                 self.user_features, left_on='user', right_index=True, how='left'
             ).merge(
                 self.item_features, left_on='adgroup_id', right_index=True, how='left'
             )
+            print("合并后列:", self.train_data.columns.tolist())  # 添加这行
             pbar.update(1)
 
 
@@ -162,6 +166,16 @@ class Trainer:
         self.processor.load_data()
         self.processor.preprocess()
 
+        # 获取实际存在的特征列名
+        user_cols = [col for col in self.processor.user_features.columns
+                     if col in self.processor.train_data.columns]
+        item_cols = [col for col in self.processor.item_features.columns
+                     if col in self.processor.train_data.columns]
+
+        print("使用的用户特征列:", user_cols)
+        print("使用的物品特征列:", item_cols)
+
+
         # 2. 准备训练数据
         train_df, val_df = train_test_split(
             self.processor.train_data,
@@ -171,19 +185,19 @@ class Trainer:
 
         # 3. 训练模型
         self.model = DeepFMRerank(
-            user_feat_dim=len(self.processor.user_features.columns),
-            item_feat_dim=len(self.processor.item_features.columns)
+            user_feat_dim=len(user_cols),
+            item_feat_dim=len(item_cols)
         )
 
         X_train = [
-            train_df[self.processor.user_features.columns].values,
-            train_df[self.processor.item_features.columns].values
+            train_df[user_cols].values,
+            train_df[item_cols].values
         ]
         y_train = train_df['clk'].values
 
         X_val = [
-            val_df[self.processor.user_features.columns].values,
-            val_df[self.processor.item_features.columns].values
+            val_df[user_cols].values,
+            val_df[item_cols].values
         ]
         y_val = val_df['clk'].values
 
