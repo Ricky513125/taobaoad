@@ -43,7 +43,10 @@ class DataProcessor:
             pbar.update(1)
             self.test_data = pd.read_parquet("data/combined_test.parquet")
             pbar.update(1)
-
+        print(self.train_data.shape)
+        print(self.test_data.shape)
+        print(self.train_data.columns)
+        print(self.test_data.columns)
         # 验证列名
         self._validate_columns()
 
