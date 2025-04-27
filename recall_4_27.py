@@ -38,17 +38,15 @@ class RecallEvaluator:
         self.user_profile = UserProfileAccessor(user_profile_path)
 
     def evaluate(self, test_data_path, top_k_list=[10, 20, 50], output_dir="recall/results"):
-        """执行评估流程"""
+        """执行评估流程（添加进度条）"""
         os.makedirs(output_dir, exist_ok=True)
+
+        # 读取测试数据并显示进度
+        print("正在加载测试数据...")
         test_data = pd.read_parquet(test_data_path)
         user_groups = test_data.groupby('user')
-
-        # 预分配GPU内存
-        batch_size = 1024
-        sample_user = next(iter(user_groups))[1].iloc[0]
-        # user_vector_dim = self._generate_user_vector(
-        #     self.user_profile.get_user_features(sample_user['user'])
-        # ).shape[0]
+        total_users = len(user_groups)
+        print(f"共需处理 {total_users} 个用户")
 
         # 初始化结果存储
         results = {f'top_{k}': {
@@ -58,39 +56,50 @@ class RecallEvaluator:
             'user_samples': []
         } for k in top_k_list}
 
-        # 分批处理用户
-        for batch_users in self._batch_users(user_groups, batch_size):
-            # GPU批量生成用户向量
-            with tf.device('/GPU:0'):
-                user_vectors = self._generate_user_vectors_batch(batch_users)
+        # 分批处理用户（添加主进度条）
+        batch_size = 1024
+        with tqdm(total=total_users, desc="总体进度") as pbar:
+            for batch_users in self._batch_users(user_groups, batch_size):
+                # GPU批量生成用户向量
+                with tf.device('/GPU:0'):
+                    user_vectors = self._generate_user_vectors_batch(batch_users)
 
-            # CPU执行召回
-            for user_id, vector in zip(batch_users.keys(), user_vectors):
-                user_data = batch_users[user_id]
-                true_items = user_data['adgroup_id'].values
+                # CPU执行召回（添加批次内进度条）
+                batch_user_ids = list(batch_users.keys())
+                for i, (user_id, vector) in enumerate(zip(batch_user_ids, user_vectors)):
+                    user_data = batch_users[user_id]
+                    true_items = user_data['adgroup_id'].values
 
-                for k in top_k_list:
-                    # FAISS CPU搜索
-                    distances, indices = self.index.search(
-                        np.expand_dims(vector, axis=0).astype('float32'),
-                        k
-                    )
-                    pred_items = self.item_ids[indices[0]]
+                    # 使用嵌套进度条处理每个top_k
+                    for k in tqdm(top_k_list, desc=f"用户 {user_id[:8]}...", leave=False):
+                        # FAISS CPU搜索
+                        distances, indices = self.index.search(
+                            np.expand_dims(vector, axis=0).astype('float32'),
+                            k
+                        )
+                        pred_items = self.item_ids[indices[0]]
 
-                    # 计算指标
-                    metrics = self._calculate_metrics(true_items, pred_items, k)
+                        # 计算指标
+                        metrics = self._calculate_metrics(true_items, pred_items, k)
 
-                    # 存储结果
-                    if len(results[f'top_{k}']['user_samples']) < 10:
-                        results[f'top_{k}']['user_samples'].append({
-                            'user_id': user_id,
-                            'true_items': true_items.tolist(),
-                            'pred_items': pred_items.tolist(),
-                        **metrics
+                        # 存储结果
+                        if len(results[f'top_{k}']['user_samples']) < 10:
+                            results[f'top_{k}']['user_samples'].append({
+                                'user_id': user_id,
+                                'true_items': true_items.tolist(),
+                                'pred_items': pred_items.tolist(),
+                            **metrics
+                            })
+                            results[f'top_{k}']['hit_rate'].append(metrics['hit'])
+                            results[f'top_{k}']['precision'].append(metrics['precision'])
+                            results[f'top_{k}']['ndcg'].append(metrics['ndcg'])
+
+                        # 更新主进度条
+                        pbar.update(1)
+                        pbar.set_postfix({
+                            '当前批次': f"{i + 1}/{len(batch_user_ids)}",
+                            '最新命中率': f"{metrics['hit']:.0%}"
                         })
-                        results[f'top_{k}']['hit_rate'].append(metrics['hit'])
-                        results[f'top_{k}']['precision'].append(metrics['precision'])
-                        results[f'top_{k}']['ndcg'].append(metrics['ndcg'])
 
             # 汇总结果
             final_metrics = self._aggregate_results(results, top_k_list)
@@ -227,6 +236,10 @@ if __name__ == "__main__":
         user_profile_path="data/user.parquet"
     )
 
+    # 执行评估（添加外层进度描述）
+    print("=" * 50)
+    print("开始双塔召回评估")
+    print("=" * 50)
     # 执行评估
     results = evaluator.evaluate(
         test_data_path="data/processed_data_test.parquet",
