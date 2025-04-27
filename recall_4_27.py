@@ -41,14 +41,14 @@ class RecallEvaluator:
         """执行评估流程"""
         os.makedirs(output_dir, exist_ok=True)
         test_data = pd.read_parquet(test_data_path)
-        user_groups = test_data.groupby('user_id')
+        user_groups = test_data.groupby('user')
 
         # 预分配GPU内存
         batch_size = 1024
         sample_user = next(iter(user_groups))[1].iloc[0]
-        user_vector_dim = self._generate_user_vector(
-            self.user_profile.get_user_features(sample_user['user_id'])
-        ).shape[0]
+        # user_vector_dim = self._generate_user_vector(
+        #     self.user_profile.get_user_features(sample_user['user'])
+        # ).shape[0]
 
         # 初始化结果存储
         results = {f'top_{k}': {
@@ -97,93 +97,93 @@ class RecallEvaluator:
             self._save_results(final_metrics, output_dir)
             return final_metrics
 
-        def _init_gpu(self):
-            """初始化GPU资源"""
-            gpus = tf.config.list_physical_devices('GPU')
-            if gpus:
-                try:
-                    for gpu in gpus:
-                        tf.config.experimental.set_memory_growth(gpu, True)
-                    print(f"GPU已启用：{gpus}")
-                    return True
-                except RuntimeError as e:
-                    print(f"GPU配置错误：{e}")
-            return False
+    def _init_gpu(self):
+        """初始化GPU资源"""
+        gpus = tf.config.list_physical_devices('GPU')
+        if gpus:
+            try:
+                for gpu in gpus:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+                print(f"GPU已启用：{gpus}")
+                return True
+            except RuntimeError as e:
+                print(f"GPU配置错误：{e}")
+        return False
 
-        def _batch_users(self, user_groups, batch_size):
-            """用户分批生成器"""
-            batch = {}
-            for user_id, group in user_groups:
-                batch[user_id] = group
-                if len(batch) >= batch_size:
-                    yield batch
-                    batch = {}
-            if batch:
+    def _batch_users(self, user_groups, batch_size):
+        """用户分批生成器"""
+        batch = {}
+        for user_id, group in user_groups:
+            batch[user_id] = group
+            if len(batch) >= batch_size:
                 yield batch
+                batch = {}
+        if batch:
+            yield batch
 
-        def _generate_user_vectors_batch(self, batch_users):
-            """GPU批量生成用户向量"""
-            # 准备批量输入
-            batch_features = []
-            for user_id, group in batch_users.items():
-                features = self.user_profile.get_user_features(user_id)
-                if features:
-                    batch_features.append(features)
+    def _generate_user_vectors_batch(self, batch_users):
+        """GPU批量生成用户向量"""
+        # 准备批量输入
+        batch_features = []
+        for user_id, group in batch_users.items():
+            features = self.user_profile.get_user_features(user_id)
+            if features:
+                batch_features.append(features)
 
-            # 转换为模型输入格式
-            inputs = {
-                'user_cms_segid': np.array([f['cms_segid'] for f in batch_features], dtype=np.int32),
-                'user_cms_group_id': np.array([f['cms_group_id'] for f in batch_features], dtype=np.int32),
-                'user_gender': np.array([f['final_gender_code'] for f in batch_features], dtype=np.int32),
-                'user_age_level': np.array([f['age_level'] for f in batch_features], dtype=np.int32),
-                'user_pvalue_level': np.array([f['pvalue_level'] + 1 for f in batch_features], dtype=np.int32),
-                'user_shopping_level': np.array([f['shopping_level'] for f in batch_features], dtype=np.int32),
-                'user_city_level': np.array([f['new_user_class_level'] for f in batch_features], dtype=np.int32),
-                'user_occupation': np.array([f['occupation'] for f in batch_features], dtype=np.float32)
-            }
+        # 转换为模型输入格式
+        inputs = {
+            'user_cms_segid': np.array([f['cms_segid'] for f in batch_features], dtype=np.int32),
+            'user_cms_group_id': np.array([f['cms_group_id'] for f in batch_features], dtype=np.int32),
+            'user_gender': np.array([f['final_gender_code'] for f in batch_features], dtype=np.int32),
+            'user_age_level': np.array([f['age_level'] for f in batch_features], dtype=np.int32),
+            'user_pvalue_level': np.array([f['pvalue_level'] + 1 for f in batch_features], dtype=np.int32),
+            'user_shopping_level': np.array([f['shopping_level'] for f in batch_features], dtype=np.int32),
+            'user_city_level': np.array([f['new_user_class_level'] for f in batch_features], dtype=np.int32),
+            'user_occupation': np.array([f['occupation'] for f in batch_features], dtype=np.float32)
+        }
 
-            # GPU预测
-            return self.user_tower.predict(inputs, batch_size=len(batch_features))
+        # GPU预测
+        return self.user_tower.predict(inputs, batch_size=len(batch_features))
 
-        def _calculate_metrics(self, true_items, pred_items, k):
-            """计算评估指标"""
-            hits = np.where(np.isin(pred_items, true_items))[0]
-            if len(hits) == 0:
-                return {'hit': 0, 'precision': 0, 'ndcg': 0}
+    def _calculate_metrics(self, true_items, pred_items, k):
+        """计算评估指标"""
+        hits = np.where(np.isin(pred_items, true_items))[0]
+        if len(hits) == 0:
+            return {'hit': 0, 'precision': 0, 'ndcg': 0}
 
-            first_hit_rank = hits[0]
-            return {
-                'hit': 1,
-                'precision': 1.0 / (first_hit_rank + 1),
-                'ndcg': 1.0 / np.log2(first_hit_rank + 2)
-            }
+        first_hit_rank = hits[0]
+        return {
+            'hit': 1,
+            'precision': 1.0 / (first_hit_rank + 1),
+            'ndcg': 1.0 / np.log2(first_hit_rank + 2)
+        }
 
-        def _aggregate_results(self, results, top_k_list):
-            """聚合结果"""
-            return {
-                f'top_{k}': {
-                    'hit_rate': np.mean(results[f'top_{k}']['hit_rate']),
-                    'precision': np.mean(results[f'top_{k}']['precision']),
-                    'ndcg': np.mean(results[f'top_{k}']['ndcg']),
-                    'num_users': len(results[f'top_{k}']['hit_rate']),
-                    'sample_results': results[f'top_{k}']['user_samples']
-                } for k in top_k_list
-            }
+    def _aggregate_results(self, results, top_k_list):
+        """聚合结果"""
+        return {
+            f'top_{k}': {
+                'hit_rate': np.mean(results[f'top_{k}']['hit_rate']),
+                'precision': np.mean(results[f'top_{k}']['precision']),
+                'ndcg': np.mean(results[f'top_{k}']['ndcg']),
+                'num_users': len(results[f'top_{k}']['hit_rate']),
+                'sample_results': results[f'top_{k}']['user_samples']
+            } for k in top_k_list
+        }
 
-        def _save_results(self, metrics, output_dir):
-            """保存结果"""
-            with open(f"{output_dir}/metrics.json", 'w') as f:
-                json.dump({
-                    k: {m: v for m, v in v.items() if m != 'sample_results'}
-                    for k, v in metrics.items()
-                }, f, indent=2)
+    def _save_results(self, metrics, output_dir):
+        """保存结果"""
+        with open(f"{output_dir}/metrics.json", 'w') as f:
+            json.dump({
+                k: {m: v for m, v in v.items() if m != 'sample_results'}
+                for k, v in metrics.items()
+            }, f, indent=2)
 
-            with open(f"{output_dir}/sample_details.json", 'w') as f:
-                json.dump({
-                    k: v['sample_results']
-                    for k, v in metrics.items()
-                }, f, indent=2)
-            print(f"结果已保存到 {output_dir}")
+        with open(f"{output_dir}/sample_details.json", 'w') as f:
+            json.dump({
+                k: v['sample_results']
+                for k, v in metrics.items()
+            }, f, indent=2)
+        print(f"结果已保存到 {output_dir}")
 
 class UserProfileAccessor:
     """用户画像访问器（与之前相同）"""
@@ -196,7 +196,7 @@ class UserProfileAccessor:
         if self.profile_path.endswith('.csv'):
             self.profile_df = pd.read_csv(self.profile_path)
             self.profile_df.set_index('userid', inplace=True)
-            self.get_fn = self._get_from_dataframe
+            # self.get_fn = self._get_from_dataframe
         else:
             raise ValueError("仅支持CSV文件")
 
