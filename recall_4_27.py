@@ -230,7 +230,7 @@ if __name__ == "__main__":
     # 执行评估
     results = evaluator.evaluate(
         test_data_path="processed_data_test.parquet",
-        top_k_list=[10, 20, 50],
+        top_k_list=[10, 20, 50, 100],
         output_dir="recall/results"
     )
 
