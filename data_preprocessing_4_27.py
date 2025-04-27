@@ -15,7 +15,9 @@ def load_and_preprocess():
     raw_sample = pd.read_csv('data/raw_sample_train.csv')
 
     # 合并数据
-    data = pd.merge(raw_sample, user_profile, how='left', left_on='user', right_on='userid')
+    raw_sample = raw_sample.rename({'user': 'user_id'})
+    user_profile = user_profile.rename({'user': 'user_id'})
+    data = pd.merge(raw_sample, user_profile, how='left', on='userid')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
     # 处理缺失值
@@ -42,7 +44,9 @@ def load_and_preprocess_test():
     raw_sample = pd.read_csv('data/raw_sample_test.csv')
 
     # 合并数据
-    data = pd.merge(raw_sample, user_profile, how='left', left_on='user', right_on='userid')
+    raw_sample = raw_sample.rename({'user': 'user_id'})
+    user_profile = user_profile.rename({'user': 'user_id'})
+    data = pd.merge(raw_sample, user_profile, how='left', on='userid')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
     # 处理缺失值
