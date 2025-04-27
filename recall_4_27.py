@@ -222,8 +222,8 @@ if __name__ == "__main__":
     evaluator = RecallEvaluator(
         user_tower_path="user_tower",
         item_tower_path="item_tower",
-        item_index_path="recall/item_index_latest.faiss",
-        item_ids_path="recall/item_ids_latest.npy",
+        item_index_path="recall/item_index_1745730778.faiss",
+        item_ids_path="recall/item_ids_1745730778.npy",
         user_profile_path="data/user_profile.csv"
     )
 
