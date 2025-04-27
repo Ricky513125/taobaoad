@@ -16,7 +16,7 @@ def load_and_preprocess():
 
     # 合并数据
     raw_sample = raw_sample.rename({'user': 'user_id'}, axis=1)
-    user_profile = user_profile.rename({'user': 'user_id'}, axis=1)
+    user_profile = user_profile.rename({'userid': 'user_id'}, axis=1)
     data = pd.merge(raw_sample, user_profile, how='left', on='user_id')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
@@ -45,7 +45,7 @@ def load_and_preprocess_test():
 
     # 合并数据
     raw_sample = raw_sample.rename({'user': 'user_id'}, axis=1)
-    user_profile = user_profile.rename({'user': 'user_id'}, axis=1)
+    user_profile = user_profile.rename({'userid': 'user_id'}, axis=1)
     data = pd.merge(raw_sample, user_profile, how='left', on='user_id')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
