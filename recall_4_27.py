@@ -194,6 +194,30 @@ class RecallEvaluator:
             }, f, indent=2)
         print(f"结果已保存到 {output_dir}")
 
+    def generate_rerank_input(self, test_data_path, top_k=100):
+        """ 生成DeepFM输入数据 """
+        test_data = pd.read_parquet(test_data_path)
+        user_groups = test_data.groupby('user')
+
+        rerank_data = []
+        for user_id, group in tqdm(user_groups, desc="生成精排输入"):
+            # 获取召回结果
+            user_feat = self.user_profile.get_user_features(user_id)
+            with tf.device('/GPU:0'):
+                user_vec = self.user_tower.predict(np.array([list(user_feat.values())]))
+
+            _, indices = self.index.search(user_vec.astype('float32'), top_k)
+            candidate_items = self.item_ids[indices[0]]
+
+            # 存储精排输入
+            rerank_data.append({
+                'user_id': user_id,
+                'candidate_items': candidate_items.tolist(),
+                'true_items': group['adgroup_id'].tolist()
+            })
+
+        return pd.DataFrame(rerank_data)
+
 class UserProfileAccessor:
     """用户画像访问器（与之前相同）"""
 
