@@ -13,10 +13,13 @@ def load_and_preprocess():
     ad_feature = pd.read_csv('data/ad_feature.csv')
     user_profile = pd.read_csv('data/user_profile.csv')
     raw_sample = pd.read_csv('data/raw_sample_train.csv')
+    print("不在用户集里的用户")
 
     # 合并数据
     raw_sample = raw_sample.rename({'user': 'user_id'}, axis=1)
     user_profile = user_profile.rename({'userid': 'user_id'}, axis=1)
+    u = raw_sample[~raw_sample['user_id'].isin(user_profile.user_id)]
+    print(u)
     data = pd.merge(raw_sample, user_profile, how='left', on='user_id')
     data = pd.merge(data, ad_feature, how='left', on='adgroup_id')
 
