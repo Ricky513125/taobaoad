@@ -193,12 +193,12 @@ class UserProfileAccessor:
         self._init_data_source()
 
     def _init_data_source(self):
-        if self.profile_path.endswith('.csv'):
-            self.profile_df = pd.read_csv(self.profile_path)
+        if self.profile_path.endswith('.parquet'):
+            self.profile_df = pd.read_parquet(self.profile_path)
             self.profile_df.set_index('userid', inplace=True)
             # self.get_fn = self._get_from_dataframe
         else:
-            raise ValueError("仅支持CSV文件")
+            raise ValueError("仅支持parquet文件")
 
     def get_user_features(self, user_id):
         try:
@@ -224,7 +224,7 @@ if __name__ == "__main__":
         item_tower_path="item_tower",
         item_index_path="recall/item_index_1745730778.faiss",
         item_ids_path="recall/item_ids_1745730778.npy",
-        user_profile_path="data/user_profile.csv"
+        user_profile_path="data/user.parquet"
     )
 
     # 执行评估
