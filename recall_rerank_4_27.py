@@ -55,44 +55,51 @@ class DataProcessor:
             pbar.update(1)
 
     def preprocess(self):
-        """数据预处理（解决列名冲突）"""
+        """修正后的数据预处理方法"""
         with tqdm(total=3, desc="数据预处理") as pbar:
             # 用户特征处理
             self.user_features['user_id'] = self.user_features['userid'].astype(int)
             self.user_features.set_index('userid', inplace=True)
 
-            # 指定需要保留的用户特征列
+            # 确保用户特征列名唯一
             self.user_feature_cols = [
                 'cms_segid', 'cms_group_id', 'final_gender_code',
                 'age_level', 'pvalue_level', 'shopping_level',
                 'occupation', 'new_user_class_level'
             ]
-            pbar.update(1)
+            self.user_features = self.user_features[self.user_feature_cols]
 
             # 物品特征处理
             self.item_features['item_id'] = self.item_features['item_id'].astype(int)
             self.item_features.set_index('item_id', inplace=True)
 
-            # 指定需要保留的物品特征列
+            # 确保物品特征列名唯一
             self.item_feature_cols = [
                 'cate_id', 'campaign_id', 'brand', 'price'
             ]
-            pbar.update(1)
+            self.item_features = self.item_features[self.item_feature_cols]
 
-            # 合并点击日志（解决列名冲突）
-            self.train_data = self.train_data.merge(
-                self.user_features[self.user_feature_cols],
-                left_on='user',
-                right_index=True,
-                how='left',
-                suffixes=('', '_user')
-            ).merge(
-                self.item_features[self.item_feature_cols],
-                left_on='adgroup_id',
-                right_index=True,
-                how='left',
-                suffixes=('', '_item')
+            # 关键修改：合并时明确区分来源
+            self.train_data = (
+                self.train_data
+                .merge(
+                    self.user_features,
+                    left_on='user',
+                    right_index=True,
+                    how='left',
+                    suffixes=('', '_user')
+                )
+                .merge(
+                    self.item_features,
+                    left_on='adgroup_id',
+                    right_index=True,
+                    how='left',
+                    suffixes=('', '_item')
+                )
             )
+
+            # 验证合并后的列名
+            print("\n合并后的列名:", self.train_data.columns.tolist())
             pbar.update(1)
 
 
@@ -214,9 +221,13 @@ class Trainer:
         #     raise ValueError(f"物品特征维度应为4，实际得到{len(actual_item_feats)}")
 
         # print("=============", len(self.processor.user_feature_cols))
+        # X_train = [
+        #     train_df[self.processor.user_feature_cols].values,
+        #     train_df[self.processor.item_feature_cols].values
+        # ]
         X_train = [
-            train_df[self.processor.user_feature_cols].values,
-            train_df[self.processor.item_feature_cols].values
+            train_df[[col for col in self.processor.user_feature_cols]].values,
+            train_df[[col for col in self.processor.item_feature_cols]].values
         ]
         # print("=============", len(self.processor.user_feature_cols))
         y_train = train_df['clk'].values
