@@ -234,6 +234,36 @@ def generate_user_sequences_streaming(behavior_path, output_path, chunk_size=50_
             user_pbar.update(1)
 
 
+def generate_user_sequences_optimized(behavior_path, output_path, chunk_size=1_000_000):
+    """单次扫描即可完成的高效实现"""
+    print(f"🚀 Optimized processing for {behavior_path}...")
+
+    # 使用字典实时聚合数据
+    user_sequences = defaultdict(list)
+
+    # 单次流式处理
+    with tqdm(desc="Processing data", unit='chunk') as pbar:
+        for chunk in pd.read_csv(
+                behavior_path,
+                chunksize=chunk_size,
+                dtype={'user': 'int32', 'cate': 'int16', 'brand': 'int16', 'time_stamp': 'int32'}
+        ):
+            # 按用户分组并排序
+            chunk_sorted = chunk.sort_values(['user', 'time_stamp'])
+            for user, group in chunk_sorted.groupby('user'):
+                seq = '|'.join(f"{row['cate']},{row['brand']}" for _, row in group.iterrows())
+                user_sequences[user].append(seq)
+            pbar.update(1)
+
+    # 写入文件
+    with open(output_path, 'w') as f_out:
+        f_out.write("user,hist_sequence\n")
+        for user, seqs in tqdm(user_sequences.items(), desc="Writing output"):
+            f_out.write(f"{user},{'|'.join(seqs)}\n")
+
+    print(f"✅ Saved to {output_path}")
+
+
 if __name__ == "__main__":
     # 配置路径
     os.makedirs("../data", exist_ok=True)
@@ -244,7 +274,7 @@ if __name__ == "__main__":
 
     try:
         # 生成用户序列
-        generate_user_sequences_streaming(behavior_path, user_seq_path)
+        generate_user_sequences_optimized(behavior_path, user_seq_path)
 
         # 生成物品序列和图
         G = generate_item_sequences(behavior_path, item_seq_path,use_gpu=GPU_AVAILABLE)
