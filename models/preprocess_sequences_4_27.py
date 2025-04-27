@@ -13,8 +13,46 @@ try:
 except ImportError:
     GPU_AVAILABLE = False
 
-def generate_user_sequences(behavior_path, output_path, chunk_size=1_000_000):
-    """内存优化的用户序列生成"""
+# def generate_user_sequences(behavior_path, output_path, chunk_size=1_000_000):
+#     """内存优化的用户序列生成"""
+#     print(f"Generating user sequences from {behavior_path}...")
+#
+#     # 第一次遍历：获取所有用户ID
+#     print("Scanning unique users...")
+#     chunks = pd.read_csv(behavior_path, chunksize=chunk_size, usecols=['user'])
+#     unique_users = set()
+#     for chunk in tqdm(chunks):
+#         unique_users.update(chunk['user'].unique())
+#     unique_users = sorted(unique_users)
+#
+#     # 第二次遍历：流式处理每个用户
+#     print("Processing user sequences...")
+#     with open(output_path, 'w') as f_out:
+#         f_out.write("user,hist_sequence\n")
+#
+#         for user in tqdm(unique_users):
+#             user_data = []
+#             for chunk in pd.read_csv(behavior_path, chunksize=chunk_size,
+#                                      dtype={'user': 'int32', 'cate': 'int32', 'brand': 'int32'}):
+#                 chunk = chunk[chunk['user'] == user]
+#                 if not chunk.empty:
+#                     user_data.append(chunk)
+#
+#             if user_data:
+#                 df_user = pd.concat(user_data)
+#                 seq = '|'.join([
+#                     f"{row['cate']},{row['brand']}"
+#                     for _, row in df_user.sort_values('time_stamp').iterrows()
+#                 ])
+#                 f_out.write(f"{user},{seq}\n")
+#
+#             del user_data
+#             gc.collect()
+#
+#     print(f"Saved user sequences to {output_path}")
+
+def generate_user_sequences_optimized(behavior_path, output_path, chunk_size=1_000_000):
+    """内存和IO优化的用户序列生成"""
     print(f"Generating user sequences from {behavior_path}...")
 
     # 第一次遍历：获取所有用户ID
@@ -25,32 +63,31 @@ def generate_user_sequences(behavior_path, output_path, chunk_size=1_000_000):
         unique_users.update(chunk['user'].unique())
     unique_users = sorted(unique_users)
 
-    # 第二次遍历：流式处理每个用户
+    # 创建用户序列字典
+    user_sequences = defaultdict(list)
+
+    # 第二次遍历：单次流式处理构建所有用户序列
     print("Processing user sequences...")
+    chunks = pd.read_csv(behavior_path, chunksize=chunk_size,
+                         dtype={'user': 'int32', 'cate': 'int32', 'brand': 'int32', 'time_stamp': 'int32'})
+
+    for chunk in tqdm(chunks, desc="Processing chunks"):
+        # 按用户分组并排序
+        grouped = chunk.sort_values(['user', 'time_stamp']).groupby('user')
+        for user, group in grouped:
+            seq = '|'.join(f"{row['cate']},{row['brand']}" for _, row in group.iterrows())
+            user_sequences[user].append(seq)
+
+    # 写入文件
+    print("Writing output...")
     with open(output_path, 'w') as f_out:
         f_out.write("user,hist_sequence\n")
-
-        for user in tqdm(unique_users):
-            user_data = []
-            for chunk in pd.read_csv(behavior_path, chunksize=chunk_size,
-                                     dtype={'user': 'int32', 'cate': 'int32', 'brand': 'int32'}):
-                chunk = chunk[chunk['user'] == user]
-                if not chunk.empty:
-                    user_data.append(chunk)
-
-            if user_data:
-                df_user = pd.concat(user_data)
-                seq = '|'.join([
-                    f"{row['cate']},{row['brand']}"
-                    for _, row in df_user.sort_values('time_stamp').iterrows()
-                ])
-                f_out.write(f"{user},{seq}\n")
-
-            del user_data
-            gc.collect()
+        for user in tqdm(unique_users, desc="Writing users"):
+            if user in user_sequences:
+                full_seq = '|'.join(user_sequences[user])
+                f_out.write(f"{user},{full_seq}\n")
 
     print(f"Saved user sequences to {output_path}")
-
 
 def generate_item_sequences(behavior_path, output_path, walks_per_node=5, use_gpu=False):
     """改进版物品序列生成（支持GPU加速）"""
@@ -128,7 +165,7 @@ if __name__ == "__main__":
 
     try:
         # 生成用户序列
-        generate_user_sequences(behavior_path, user_seq_path)
+        generate_user_sequences_optimized(behavior_path, user_seq_path)
 
         # 生成物品序列和图
         G = generate_item_sequences(behavior_path, item_seq_path,use_gpu=GPU_AVAILABLE)
