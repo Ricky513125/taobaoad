@@ -12,6 +12,9 @@ from sklearn.metrics import roc_auc_score, ndcg_score, precision_score
 """
 4、27 写的普通双塔召回+deepFM 
 
+4.28 
+
+auc 从大写改到小写
 """
 
 
@@ -100,7 +103,7 @@ class DeepFMRerank:
         model.compile(
             optimizer=tf.keras.optimizers.Adam(0.001),
             loss='binary_crossentropy',
-            metrics=['AUC']
+            metrics=['auc']
         )
         return model
 
@@ -183,7 +186,7 @@ class Trainer:
         print(f"正样本比例: {y_train.mean():.2%}")
 
         history = self.model.train(X_train, y_train, X_val, y_val)
-
+        print("History keys:", history.history.keys())
         # 6. 测试集评估
         X_test = [
             self.processor.test_data[self.processor.user_feature_cols].values,
@@ -216,8 +219,8 @@ class Trainer:
         # 绘制训练曲线
         plt.figure(figsize=(12, 4))
         plt.subplot(1, 2, 1)
-        plt.plot(history.history['AUC'], label='Train AUC')
-        plt.plot(history.history['val_AUC'], label='Val AUC')
+        plt.plot(history.history['auc'], label='Train AUC')
+        plt.plot(history.history['val_auc'], label='Val AUC')
         plt.title('Model AUC')
         plt.legend()
 
