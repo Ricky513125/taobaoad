@@ -8,6 +8,9 @@ from tqdm import tqdm
 """
 针对4.27修改过的数据集进行重新的普通双塔召回评估
 
+4.28 
+100 个召回全为0 
+增加500 和1000召回量看看
 """
 
 class RecallEvaluator:
@@ -270,8 +273,8 @@ if __name__ == "__main__":
     # 执行评估
     results = evaluator.evaluate(
         test_data_path="data/processed_data_test3.parquet",
-        top_k_list=[10, 20, 50, 100],
-        output_dir="recall/results/0428"
+        top_k_list=[10, 20, 50, 100, 500, 1000],
+        output_dir="recall/results/0428_2"
     )
 
     # 打印结果摘要
