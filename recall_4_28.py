@@ -47,7 +47,7 @@ class RecallEvaluator:
         # 读取测试数据并显示进度
         print("正在加载测试数据...")
         test_data = pd.read_parquet(test_data_path)
-        user_groups = test_data.groupby('user')
+        user_groups = test_data.groupby('user_id')
         total_users = len(user_groups)
         print(f"共需处理 {total_users} 个用户")
 
