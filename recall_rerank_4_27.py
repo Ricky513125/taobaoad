@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Dot, BatchNormalization
 from tensorflow.keras.models import Model
 from sklearn.metrics import roc_auc_score, ndcg_score, precision_score
+from tensorflow.keras.metrics import AUC  # 添加导入
 """
 4、27 写的普通双塔召回+deepFM 
 
@@ -103,7 +104,8 @@ class DeepFMRerank:
         model.compile(
             optimizer=tf.keras.optimizers.Adam(0.001),
             loss='binary_crossentropy',
-            metrics=['auc']
+            # metrics=['auc']
+            metrics=[AUC(name='auc')]
         )
         return model
 
