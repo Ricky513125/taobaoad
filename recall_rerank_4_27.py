@@ -9,6 +9,12 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Dot, BatchNormalization
 from tensorflow.keras.models import Model
 from sklearn.metrics import roc_auc_score, ndcg_score, precision_score
+"""
+4、27 写的普通双塔召回+deepFM 
+
+"""
+
+
 
 # 设置GPU内存自动增长
 gpus = tf.config.list_physical_devices('GPU')
@@ -39,9 +45,9 @@ class DataProcessor:
     def load_data(self):
         """直接加载预合并的数据"""
         with tqdm(total=2, desc="加载数据") as pbar:
-            self.train_data = pd.read_parquet("data/processed_data2.parquet")
+            self.train_data = pd.read_parquet("data/processed_data3.parquet")
             pbar.update(1)
-            self.test_data = pd.read_parquet("data/processed_data_test2.parquet")
+            self.test_data = pd.read_parquet("data/processed_data_test3.parquet")
             pbar.update(1)
         print(self.train_data.shape)
         print(self.test_data.shape)
@@ -195,17 +201,17 @@ class Trainer:
 
     def save_results(self, history, metrics, y_true, y_pred):
         """保存评估结果"""
-        os.makedirs("results", exist_ok=True)
+        os.makedirs("results/recall0428", exist_ok=True)
 
         # 保存指标
-        with open("results/metrics.json", "w") as f:
+        with open("results/recall0428/metrics.json", "w") as f:
             json.dump(metrics, f, indent=2)
 
         # 保存预测结果
         pd.DataFrame({
             'true': y_true,
             'pred': y_pred
-        }).to_csv("results/predictions.csv", index=False)
+        }).to_csv("results/recall0428/predictions.csv", index=False)
 
         # 绘制训练曲线
         plt.figure(figsize=(12, 4))
@@ -222,7 +228,7 @@ class Trainer:
         plt.legend()
 
         plt.tight_layout()
-        plt.savefig('results/training_curve.png')
+        plt.savefig('results/recall0428/training_curve.png')
         plt.close()
 
 
