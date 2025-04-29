@@ -158,7 +158,7 @@ class DeepFMRerank:
         """修正后的评估逻辑：按用户分组计算指标"""
         # 假设数据中包含user_id列（需提前处理）
         test_df = pd.DataFrame({
-            'user_id': self.processor.test_data['user_id'],
+            'user_id': X_test[0]['user_id'],
             'user_feat': list(X_test[0]),
             'item_feat': list(X_test[1]),
             'clk': y_test
