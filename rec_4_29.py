@@ -56,6 +56,75 @@ class DataProcessor:
             'adgroup_id', 'cate_id', 'campaign_id', 'brand', 'price'
         ]
 
+    # def load_all_data(self):
+    #     """加载所有必要数据"""
+    #     # 加载主数据
+    #     self.train_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_train.parquet')
+    #     self.test_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_test3.parquet')
+    #
+    #     # 加载序列数据（处理可能的格式问题）
+    #     seq_path = self.cfg.seq_dir / "user_sequences_optimized.csv"
+    #     try:
+    #         # 尝试不同分隔符读取
+    #         for sep in [',', '\t', ';']:
+    #             try:
+    #                 seq_df = pd.read_csv(seq_path, sep=sep, on_bad_lines='skip')
+    #                 if len(seq_df.columns) >= 2:  # 至少需要user_id和hist_sequence两列
+    #                     break
+    #             except:
+    #                 continue
+    #     except Exception as e:
+    #         print(f"读取序列数据失败: {e}")
+    #         raise
+    #
+    #     print("序列数据列名:", seq_df.columns)
+    #
+    #     # 处理序列数据 - 将hist_sequence字符串转换为列表
+    #     if 'hist_sequence' in seq_df.columns:
+    #         seq_df['hist_sequence'] = seq_df['hist_sequence'].apply(
+    #             lambda x: list(map(int, x.strip('[]').split(','))) if isinstance(x, str) else []
+    #         )
+    #         # 创建用户序列字典
+    #         self.user_sequences = seq_df.set_index('user_id')['hist_sequence'].to_dict()
+    #     else:
+    #         raise ValueError("user_sequences_optimized.csv 必须包含 user_id 和 hist_sequence 列")
+    #
+    #     # 加载图嵌入
+    #     graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
+    #     with open(graph_path, 'rb') as f:
+    #         self.item_graph = pickle.load(f)
+    #
+    #     # 数据预处理
+    #     self._preprocess_data()
+    #
+    # def _preprocess_data(self):
+    #     """数据预处理"""
+    #     # 数值特征标准化
+    #     numeric_cols = ['price', 'pvalue_level', 'shopping_level']
+    #     for col in numeric_cols:
+    #         if col in self.train_data.columns:
+    #             mean = self.train_data[col].mean()
+    #             std = self.train_data[col].std()
+    #             self.train_data[col] = (self.train_data[col] - mean) / std
+    #             self.test_data[col] = (self.test_data[col] - mean) / std
+    #
+    #     # 填充缺失的图嵌入
+    #     default_graph_emb = np.zeros(64)  # 假设图嵌入维度为64
+    #     self.train_data['graph_emb'] = self.train_data['adgroup_id'].apply(
+    #         lambda x: self.item_graph.get(x, default_graph_emb)
+    #     )
+    #     self.test_data['graph_emb'] = self.test_data['adgroup_id'].apply(
+    #         lambda x: self.item_graph.get(x, default_graph_emb)
+    #     )
+    #
+    #     # 添加序列数据
+    #     self.train_data['hist_seq'] = self.train_data['user_id'].apply(
+    #         lambda x: self._pad_sequence(self.user_sequences.get(x, []))
+    #     )
+    #     self.test_data['hist_seq'] = self.test_data['user_id'].apply(
+    #         lambda x: self._pad_sequence(self.user_sequences.get(x, []))
+    #     )
+
     def load_all_data(self):
         """加载所有必要数据"""
         # 加载主数据
@@ -64,37 +133,39 @@ class DataProcessor:
 
         # 加载序列数据（处理可能的格式问题）
         seq_path = self.cfg.seq_dir / "user_sequences_optimized.csv"
-        try:
-            # 尝试不同分隔符读取
-            for sep in [',', '\t', ';']:
-                try:
-                    seq_df = pd.read_csv(seq_path, sep=sep, on_bad_lines='skip')
-                    if len(seq_df.columns) >= 2:  # 至少需要user_id和item_id两列
-                        break
-                except:
-                    continue
-        except Exception as e:
-            print(f"读取序列数据失败: {e}")
-            raise
 
-        print(seq_df.columns)
-        # 确保有必要的列
-        # if 'user_id' not in seq_df.columns or 'adgroup_id' not in seq_df.columns:
-        #     raise ValueError("序列数据必须包含user_id和adgroup_id列")
+        # 读取序列数据（保持与原始整合代码一致的格式）
+        seq_df = pd.read_csv(seq_path, header=None, names=['user_id', 'hist_sequence'])
 
-        # 处理序列数据
-        self.user_sequences = seq_df.groupby('user_id')['adgroup_id'].apply(list).to_dict()
+        # 解析序列数据（保持原始格式：cate,brand|cate,brand|...）
+        def parse_sequence(seq_str):
+            """解析形如 '7971,7917|6197,-26970|...' 的序列字符串"""
+            if pd.isna(seq_str):
+                return []
+            try:
+                # 保持原始格式：cate,brand 对
+                return [tuple(pair.split(',')) for pair in seq_str.split('|')]
+            except:
+                return []
+
+        # 应用解析函数
+        seq_df['hist_sequence'] = seq_df['hist_sequence'].apply(parse_sequence)
+
+        # 创建用户序列字典（保持与原始整合代码一致的格式）
+        self.user_sequences = seq_df.groupby('user_id')['hist_sequence'].apply(
+            lambda x: [item for sublist in x for item in sublist][:self.cfg.user_seq_len]
+        ).to_dict()
 
         # 加载图嵌入
         graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
         with open(graph_path, 'rb') as f:
             self.item_graph = pickle.load(f)
 
-        # 数据预处理
+        # 数据预处理（调整以处理cate,brand对）
         self._preprocess_data()
 
     def _preprocess_data(self):
-        """数据预处理"""
+        """数据预处理（调整为处理cate,brand对）"""
         # 数值特征标准化
         numeric_cols = ['price', 'pvalue_level', 'shopping_level']
         for col in numeric_cols:
@@ -113,12 +184,28 @@ class DataProcessor:
             lambda x: self.item_graph.get(x, default_graph_emb)
         )
 
-        # 添加序列数据
+        # 添加序列数据（调整为处理cate,brand对）
+        def process_sequence(seq_pairs):
+            """处理cate,brand序列对"""
+            if not seq_pairs:
+                return [0] * self.cfg.user_seq_len * 2  # 每个对包含两个元素
+
+            # 展平序列对 (c1,b1,c2,b2,...)
+            flat_seq = []
+            for pair in seq_pairs[:self.cfg.user_seq_len]:
+                flat_seq.extend([int(pair[0]), int(pair[1])])
+
+            # 填充不足部分
+            if len(flat_seq) < self.cfg.user_seq_len * 2:
+                flat_seq += [0] * (self.cfg.user_seq_len * 2 - len(flat_seq))
+
+            return flat_seq
+
         self.train_data['hist_seq'] = self.train_data['user_id'].apply(
-            lambda x: self._pad_sequence(self.user_sequences.get(x, []))
+            lambda x: process_sequence(self.user_sequences.get(x, []))
         )
         self.test_data['hist_seq'] = self.test_data['user_id'].apply(
-            lambda x: self._pad_sequence(self.user_sequences.get(x, []))
+            lambda x: process_sequence(self.user_sequences.get(x, []))
         )
 
     def _pad_sequence(self, seq):
