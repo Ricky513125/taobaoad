@@ -288,7 +288,7 @@ if __name__ == "__main__":
     results = evaluator.evaluate(
         test_data_path="data/processed_data_test3.parquet",
         top_k_list=[10, 20, 50, 100, 500, 1000],
-        output_dir="recall/results/0428_2"
+        output_dir="recall/results/recall_4_29"
     )
 
     # 打印结果摘要
