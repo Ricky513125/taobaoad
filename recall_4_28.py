@@ -11,6 +11,9 @@ from tqdm import tqdm
 4.28 
 100 个召回全为0 
 增加500 和1000召回量看看
+
+4.29 
+添加单用户验证， 检测能否召回到
 """
 
 class RecallEvaluator:
@@ -293,20 +296,20 @@ if __name__ == "__main__":
     )
 
     evaluator.check_vector_spaces()
-    # 第三步：验证单个用户召回
-    test_user_id = 1  # 使用您调试信息中的首用户ID
-    test_items = [133190, 142774, 769066]  # 该用户的真实物品
-
-    user_feat = evaluator.user_profile.get_user_features(test_user_id)
-    user_vec = evaluator.user_tower.predict(np.array([list(user_feat.values())]))
-
-    distances, indices = evaluator.index.search(user_vec.astype('float32'), 1000)
-    recalled = evaluator.item_ids[indices[0]]
-    print("\n=== 单用户验证 ===")
-    print(f"用户ID: {test_user_id}")
-    print(f"真实物品: {test_items}")
-    print(f"召回物品交集: {set(recalled) & set(test_items)}")
-    print(f"Top100召回示例: {recalled[:100]}")
+    # # 第三步：验证单个用户召回
+    # test_user_id = 1  # 使用您调试信息中的首用户ID
+    # test_items = [133190, 142774, 769066]  # 该用户的真实物品
+    #
+    # user_feat = evaluator.user_profile.get_user_features(test_user_id)
+    # user_vec = evaluator.user_tower.predict(np.array([list(user_feat.values())]))
+    #
+    # distances, indices = evaluator.index.search(user_vec.astype('float32'), 1000)
+    # recalled = evaluator.item_ids[indices[0]]
+    # print("\n=== 单用户验证 ===")
+    # print(f"用户ID: {test_user_id}")
+    # print(f"真实物品: {test_items}")
+    # print(f"召回物品交集: {set(recalled) & set(test_items)}")
+    # print(f"Top100召回示例: {recalled[:100]}")
 
 
     # 执行评估（添加外层进度描述）
