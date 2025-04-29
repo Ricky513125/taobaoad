@@ -1,6 +1,8 @@
 import os
 import json
 import pickle
+from collections import defaultdict
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -55,75 +57,6 @@ class DataProcessor:
         self.item_feature_cols = [
             'adgroup_id', 'cate_id', 'campaign_id', 'brand', 'price'
         ]
-
-    # def load_all_data(self):
-    #     """加载所有必要数据"""
-    #     # 加载主数据
-    #     self.train_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_train.parquet')
-    #     self.test_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_test3.parquet')
-    #
-    #     # 加载序列数据（处理可能的格式问题）
-    #     seq_path = self.cfg.seq_dir / "user_sequences_optimized.csv"
-    #     try:
-    #         # 尝试不同分隔符读取
-    #         for sep in [',', '\t', ';']:
-    #             try:
-    #                 seq_df = pd.read_csv(seq_path, sep=sep, on_bad_lines='skip')
-    #                 if len(seq_df.columns) >= 2:  # 至少需要user_id和hist_sequence两列
-    #                     break
-    #             except:
-    #                 continue
-    #     except Exception as e:
-    #         print(f"读取序列数据失败: {e}")
-    #         raise
-    #
-    #     print("序列数据列名:", seq_df.columns)
-    #
-    #     # 处理序列数据 - 将hist_sequence字符串转换为列表
-    #     if 'hist_sequence' in seq_df.columns:
-    #         seq_df['hist_sequence'] = seq_df['hist_sequence'].apply(
-    #             lambda x: list(map(int, x.strip('[]').split(','))) if isinstance(x, str) else []
-    #         )
-    #         # 创建用户序列字典
-    #         self.user_sequences = seq_df.set_index('user_id')['hist_sequence'].to_dict()
-    #     else:
-    #         raise ValueError("user_sequences_optimized.csv 必须包含 user_id 和 hist_sequence 列")
-    #
-    #     # 加载图嵌入
-    #     graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
-    #     with open(graph_path, 'rb') as f:
-    #         self.item_graph = pickle.load(f)
-    #
-    #     # 数据预处理
-    #     self._preprocess_data()
-    #
-    # def _preprocess_data(self):
-    #     """数据预处理"""
-    #     # 数值特征标准化
-    #     numeric_cols = ['price', 'pvalue_level', 'shopping_level']
-    #     for col in numeric_cols:
-    #         if col in self.train_data.columns:
-    #             mean = self.train_data[col].mean()
-    #             std = self.train_data[col].std()
-    #             self.train_data[col] = (self.train_data[col] - mean) / std
-    #             self.test_data[col] = (self.test_data[col] - mean) / std
-    #
-    #     # 填充缺失的图嵌入
-    #     default_graph_emb = np.zeros(64)  # 假设图嵌入维度为64
-    #     self.train_data['graph_emb'] = self.train_data['adgroup_id'].apply(
-    #         lambda x: self.item_graph.get(x, default_graph_emb)
-    #     )
-    #     self.test_data['graph_emb'] = self.test_data['adgroup_id'].apply(
-    #         lambda x: self.item_graph.get(x, default_graph_emb)
-    #     )
-    #
-    #     # 添加序列数据
-    #     self.train_data['hist_seq'] = self.train_data['user_id'].apply(
-    #         lambda x: self._pad_sequence(self.user_sequences.get(x, []))
-    #     )
-    #     self.test_data['hist_seq'] = self.test_data['user_id'].apply(
-    #         lambda x: self._pad_sequence(self.user_sequences.get(x, []))
-    #     )
 
     def load_all_data(self):
         """加载所有必要数据"""
@@ -200,13 +133,35 @@ class DataProcessor:
                     except Exception as e:
                         print(f"行解析失败: {line[:50]}... 错误: {str(e)}")
 
-        # 加载图嵌入
-        graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
-        with open(graph_path, 'rb') as f:
-            self.item_graph = pickle.load(f)
+        # # 加载图嵌入
+        # graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
+        # with open(graph_path, 'rb') as f:
+        #     self.item_graph = pickle.load(f)
+
+            # 修改图加载部分 - 确保加载的是共现字典而不是DiGraph
+            graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
+            with open(graph_path, 'rb') as f:
+                graph_data = pickle.load(f)
+
+                # 检查加载的数据类型
+                if isinstance(graph_data, defaultdict):
+                    self.item_graph = graph_data
+                else:
+                    # 如果是DiGraph，转换为字典格式
+                    self.item_graph = self._convert_graph_to_dict(graph_data)
 
         # 数据预处理
         self._preprocess_data()
+
+    def _convert_graph_to_dict(self, graph):
+        """将NetworkX图转换为共现字典格式"""
+        from collections import defaultdict, Counter
+        co_occur = defaultdict(Counter)
+
+        for u, v, data in graph.edges(data=True):
+            co_occur[u][v] = data.get('weight', 1)
+
+        return co_occur
 
     def _preprocess_data(self):
         """数据预处理（调整为处理cate,brand对）"""
@@ -219,14 +174,44 @@ class DataProcessor:
                 self.train_data[col] = (self.train_data[col] - mean) / std
                 self.test_data[col] = (self.test_data[col] - mean) / std
 
-        # 填充缺失的图嵌入
-        default_graph_emb = np.zeros(64)  # 假设图嵌入维度为64
-        self.train_data['graph_emb'] = self.train_data['adgroup_id'].apply(
-            lambda x: self.item_graph.get(x, default_graph_emb)
-        )
-        self.test_data['graph_emb'] = self.test_data['adgroup_id'].apply(
-            lambda x: self.item_graph.get(x, default_graph_emb)
-        )
+        # # 填充缺失的图嵌入
+        # default_graph_emb = np.zeros(64)  # 假设图嵌入维度为64
+        # self.train_data['graph_emb'] = self.train_data['adgroup_id'].apply(
+        #     lambda x: self.item_graph.get(x, default_graph_emb)
+        # )
+        # self.test_data['graph_emb'] = self.test_data['adgroup_id'].apply(
+        #     lambda x: self.item_graph.get(x, default_graph_emb)
+        # )
+
+            # 修改图嵌入处理部分
+            default_graph_emb = np.zeros(64)  # 假设图嵌入维度为64
+
+            def get_graph_emb(x):
+                # 生成与共现图中一致的物品标识
+                item_id = f"{x['cate_id']}_{x['brand']}" if isinstance(x, pd.Series) else f"{x}_0"
+
+                # 从共现字典中获取相关项
+                related_items = self.item_graph.get(item_id, {})
+
+                if not related_items:
+                    return default_graph_emb
+
+                # 简单示例：取top3相关项的均值作为嵌入
+                top_items = sorted(related_items.items(), key=lambda x: -x[1])[:3]
+                emb = np.mean([self._get_item_embedding(item) for item, _ in top_items], axis=0)
+                return emb if not np.isnan(emb).any() else default_graph_emb
+
+            # 临时解决方案：如果没有单独的嵌入，使用one-hot编码
+            unique_items = set().union(*[v.keys() for v in self.item_graph.values()]).union(self.item_graph.keys())
+            item_to_idx = {item: i for i, item in enumerate(unique_items)}
+            self._get_item_embedding = lambda x: np.eye(len(item_to_idx))[item_to_idx[x]]
+
+            self.train_data['graph_emb'] = self.train_data.apply(
+                lambda row: get_graph_emb(row), axis=1
+            )
+            self.test_data['graph_emb'] = self.test_data.apply(
+                lambda row: get_graph_emb(row), axis=1
+            )
 
         # 添加序列数据（调整为处理cate,brand对）
         def process_sequence(seq_pairs):
