@@ -12,7 +12,11 @@ from sklearn.metrics import roc_auc_score, precision_score
 from tensorflow.keras.metrics import AUC
 import tensorflow_ranking as tfr
 import matplotlib.pyplot as plt
+"""
+还没跑
 
+
+"""
 
 class DataProcessor:
     """数据处理管道（带ID Embedding版）"""

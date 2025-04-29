@@ -54,6 +54,20 @@ class RecallEvaluator:
         total_users = len(user_groups)
         print(f"共需处理 {total_users} 个用户")
 
+        # 在_evaluate方法中添加调试代码
+        print("\n=== 调试信息 ===")
+        print(f"测试数据用户数: {len(user_groups)}")
+        print(f"首用户ID: {next(iter(user_groups.groups))}")
+        print(f"首用户真实物品: {user_groups.get_group(next(iter(user_groups.groups)))['adgroup_id'].values[:5]}")
+        print(f"FAISS索引维度: {self.index.d}")
+        # print(f"用户向量示例: {user_vectors[0][:5] if len(user_vectors) > 0 else '无'}")
+
+        # 检查用户画像与测试数据对齐
+        test_users = set(test_data['user_id'].unique())
+        profile_users = set(pd.read_parquet("data/user.parquet")['userid'])
+        print(f"测试集用户与画像重叠率: {len(test_users & profile_users) / len(test_users):.1%}")
+
+
         # 初始化结果存储
         results = {f'top_{k}': {
             'hit_rate': [],
