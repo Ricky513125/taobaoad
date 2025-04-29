@@ -262,17 +262,17 @@ class Trainer:
 
     def save_results(self, history, metrics, y_true, y_pred):
         """保存评估结果"""
-        os.makedirs("results/recall0428", exist_ok=True)
+        os.makedirs("results/recall0429", exist_ok=True)
 
         # 保存指标
-        with open("results/recall0428/metrics.json", "w") as f:
+        with open("results/recall0429/metrics.json", "w") as f:
             json.dump(metrics, f, indent=2)
 
         # 保存预测结果
         pd.DataFrame({
             'true': y_true,
             'pred': y_pred
-        }).to_csv("results/recall0428/predictions.csv", index=False)
+        }).to_csv("results/recall0429/predictions.csv", index=False)
 
         # 绘制训练曲线
         plt.figure(figsize=(12, 4))
@@ -289,7 +289,7 @@ class Trainer:
         plt.legend()
 
         plt.tight_layout()
-        plt.savefig('results/recall0428/training_curve.png')
+        plt.savefig('results/recall0429/training_curve.png')
         plt.close()
 
 
