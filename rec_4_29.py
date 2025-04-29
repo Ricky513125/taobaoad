@@ -79,8 +79,8 @@ class DataProcessor:
 
         print(seq_df.columns)
         # 确保有必要的列
-        if 'user_id' not in seq_df.columns or 'adgroup_id' not in seq_df.columns:
-            raise ValueError("序列数据必须包含user_id和adgroup_id列")
+        # if 'user_id' not in seq_df.columns or 'adgroup_id' not in seq_df.columns:
+        #     raise ValueError("序列数据必须包含user_id和adgroup_id列")
 
         # 处理序列数据
         self.user_sequences = seq_df.groupby('user_id')['adgroup_id'].apply(list).to_dict()
