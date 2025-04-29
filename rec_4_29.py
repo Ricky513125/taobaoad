@@ -131,37 +131,72 @@ class DataProcessor:
         self.train_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_train.parquet')
         self.test_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_test3.parquet')
 
-        # 加载序列数据（处理可能的格式问题）
+        # 加载序列数据 - 现在正确处理有标题行的CSV
         seq_path = self.cfg.seq_dir / "user_sequences_optimized.csv"
 
-        # 读取序列数据（保持与原始整合代码一致的格式）
-        seq_df = pd.read_csv(seq_path, header=None, names=['user_id', 'hist_sequence'])
+        # 方法1：使用pandas读取有标题的CSV
+        try:
+            seq_df = pd.read_csv(seq_path)
+            print("CSV列名:", seq_df.columns.tolist())  # 调试用
 
-        # 解析序列数据（保持原始格式：cate,brand|cate,brand|...）
-        def parse_sequence(seq_str):
-            """解析形如 '7971,7917|6197,-26970|...' 的序列字符串"""
-            if pd.isna(seq_str):
-                return []
-            try:
-                # 保持原始格式：cate,brand 对
-                return [tuple(pair.split(',')) for pair in seq_str.split('|')]
-            except:
-                return []
+            # 确保有正确的列
+            if 'user_id' not in seq_df.columns or 'hist_sequence' not in seq_df.columns:
+                raise ValueError("CSV文件必须包含user_id和hist_sequence列")
 
-        # 应用解析函数
-        seq_df['hist_sequence'] = seq_df['hist_sequence'].apply(parse_sequence)
+            # 解析序列数据
+            def parse_sequence(seq_str):
+                """解析形如 'cate,brand|cate,brand|...' 的序列字符串"""
+                if pd.isna(seq_str):
+                    return []
+                try:
+                    return [tuple(map(int, pair.split(','))) for pair in seq_str.split('|') if pair]
+                except Exception as e:
+                    print(f"解析序列时出错: {seq_str[:50]}... 错误: {e}")
+                    return []
 
-        # 创建用户序列字典（保持与原始整合代码一致的格式）
-        self.user_sequences = seq_df.groupby('user_id')['hist_sequence'].apply(
-            lambda x: [item for sublist in x for item in sublist][:self.cfg.user_seq_len]
-        ).to_dict()
+            seq_df['parsed_sequence'] = seq_df['hist_sequence'].apply(parse_sequence)
+
+            # 创建用户序列字典
+            self.user_sequences = seq_df.groupby('user_id')['parsed_sequence'].apply(
+                lambda x: [item for sublist in x for item in sublist][:self.cfg.user_seq_len]
+            ).to_dict()
+
+        except Exception as e:
+            print(f"加载序列数据失败: {e}")
+            # 回退到逐行读取的方法
+            print("尝试使用逐行读取方法...")
+            user_sequences = {}
+            with open(seq_path, 'r') as f:
+                # 跳过标题行
+                next(f)
+                for line in tqdm(f, desc="加载用户序列"):
+                    try:
+                        parts = line.strip().split(',', 1)
+                        if len(parts) < 2:
+                            continue
+
+                        user_id = int(parts[0])
+                        seq_str = parts[1]
+
+                        seq_pairs = []
+                        for pair in seq_str.split('|'):
+                            if pair and ',' in pair:
+                                cate, brand = pair.split(',', 1)
+                                seq_pairs.append((int(cate), int(brand)))
+
+                        user_sequences[user_id] = seq_pairs[:self.cfg.user_seq_len]
+                    except Exception as e:
+                        print(f"解析行时出错: {line[:50]}... 错误: {e}")
+                        continue
+
+            self.user_sequences = user_sequences
 
         # 加载图嵌入
         graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
         with open(graph_path, 'rb') as f:
             self.item_graph = pickle.load(f)
 
-        # 数据预处理（调整以处理cate,brand对）
+        # 数据预处理
         self._preprocess_data()
 
     def _preprocess_data(self):
