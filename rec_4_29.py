@@ -131,65 +131,74 @@ class DataProcessor:
         self.train_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_train.parquet')
         self.test_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_test3.parquet')
 
-        # 加载序列数据 - 现在正确处理有标题行的CSV
+        # 加载序列数据
         seq_path = self.cfg.seq_dir / "user_sequences_optimized.csv"
 
-        # 方法1：使用pandas读取有标题的CSV
+        # 方法1：使用pandas读取，处理不定长序列
         try:
+            # 读取CSV，确保识别header
             seq_df = pd.read_csv(seq_path)
-            print("CSV列名:", seq_df.columns.tolist())  # 调试用
+            print("成功读取CSV，检测到列名:", seq_df.columns.tolist())
 
-            # 确保有正确的列
+            # 验证列名
             if 'user_id' not in seq_df.columns or 'hist_sequence' not in seq_df.columns:
-                raise ValueError("CSV文件必须包含user_id和hist_sequence列")
+                raise ValueError("CSV必须包含user_id和hist_sequence列")
 
-            # 解析序列数据
-            def parse_sequence(seq_str):
-                """解析形如 'cate,brand|cate,brand|...' 的序列字符串"""
-                if pd.isna(seq_str):
-                    return []
+            # 解析序列函数（处理不定长）
+            def parse_sequence(row):
                 try:
-                    return [tuple(map(int, pair.split(','))) for pair in seq_str.split('|') if pair]
+                    user_id = int(row['user_id'])
+                    seq_pairs = []
+                    if pd.notna(row['hist_sequence']):
+                        for pair in row['hist_sequence'].split('|'):
+                            if pair and ',' in pair:
+                                cate, brand = map(int, pair.split(',', 1))
+                                seq_pairs.append((cate, brand))
+                    return user_id, seq_pairs
                 except Exception as e:
-                    print(f"解析序列时出错: {seq_str[:50]}... 错误: {e}")
-                    return []
+                    print(f"解析错误 行内容:{row} 错误:{str(e)}")
+                    return None, []
 
-            seq_df['parsed_sequence'] = seq_df['hist_sequence'].apply(parse_sequence)
+            # 应用解析
+            parsed_data = []
+            for _, row in tqdm(seq_df.iterrows(), total=len(seq_df), desc="解析序列"):
+                user_id, seq = parse_sequence(row)
+                if user_id is not None:
+                    parsed_data.append((user_id, seq))
 
-            # 创建用户序列字典
-            self.user_sequences = seq_df.groupby('user_id')['parsed_sequence'].apply(
-                lambda x: [item for sublist in x for item in sublist][:self.cfg.user_seq_len]
-            ).to_dict()
+            # 转换为字典
+            self.user_sequences = {
+                user_id: seq[:self.cfg.user_seq_len]
+                for user_id, seq in parsed_data
+            }
 
         except Exception as e:
-            print(f"加载序列数据失败: {e}")
-            # 回退到逐行读取的方法
-            print("尝试使用逐行读取方法...")
-            user_sequences = {}
+            print(f"Pandas读取失败: {str(e)}")
+            # 方法2：手动逐行读取（兼容性更强）
+            self.user_sequences = {}
             with open(seq_path, 'r') as f:
-                # 跳过标题行
+                # 跳过header
                 next(f)
-                for line in tqdm(f, desc="加载用户序列"):
+                for line in tqdm(f, desc="手动解析序列"):
                     try:
+                        # 分割第一个逗号前的user_id和后面的序列
                         parts = line.strip().split(',', 1)
                         if len(parts) < 2:
                             continue
 
                         user_id = int(parts[0])
-                        seq_str = parts[1]
-
                         seq_pairs = []
-                        for pair in seq_str.split('|'):
-                            if pair and ',' in pair:
-                                cate, brand = pair.split(',', 1)
-                                seq_pairs.append((int(cate), int(brand)))
 
-                        user_sequences[user_id] = seq_pairs[:self.cfg.user_seq_len]
+                        # 处理可能为空的序列
+                        if parts[1].strip():
+                            for pair in parts[1].split('|'):
+                                if pair and ',' in pair:
+                                    cate, brand = map(int, pair.split(',', 1))
+                                    seq_pairs.append((cate, brand))
+
+                        self.user_sequences[user_id] = seq_pairs[:self.cfg.user_seq_len]
                     except Exception as e:
-                        print(f"解析行时出错: {line[:50]}... 错误: {e}")
-                        continue
-
-            self.user_sequences = user_sequences
+                        print(f"行解析失败: {line[:50]}... 错误: {str(e)}")
 
         # 加载图嵌入
         graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
