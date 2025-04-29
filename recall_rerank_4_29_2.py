@@ -303,9 +303,15 @@ class Trainer:
         """保存结果"""
         os.makedirs("results/recall_with_ids_4_29", exist_ok=True)
 
+        # 将 metrics 中的 numpy.float32 转换为 Python float
+        serializable_metrics = {
+            k: float(v) if isinstance(v, np.float32) else v
+            for k, v in metrics.items()
+        }
+
         # 保存指标
         with open("results/recall_with_ids_4_29/metrics.json", "w") as f:
-            json.dump(metrics, f, indent=2)
+            json.dump(serializable_metrics, f, indent=2)
 
         # 保存预测结果
         pd.DataFrame({
