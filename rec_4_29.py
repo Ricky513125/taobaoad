@@ -53,7 +53,7 @@ class DataProcessor:
             'occupation', 'new_user_class_level'
         ]
         self.item_feature_cols = [
-            'item_id', 'cate_id', 'campaign_id', 'brand', 'price'
+            'adgroup_id', 'cate_id', 'campaign_id', 'brand', 'price'
         ]
 
     def load_all_data(self):
@@ -79,11 +79,11 @@ class DataProcessor:
 
         print(seq_df.columns)
         # 确保有必要的列
-        if 'user_id' not in seq_df.columns or 'item_id' not in seq_df.columns:
-            raise ValueError("序列数据必须包含user_id和item_id列")
+        if 'user_id' not in seq_df.columns or 'adgroup_id' not in seq_df.columns:
+            raise ValueError("序列数据必须包含user_id和adgroup_id列")
 
         # 处理序列数据
-        self.user_sequences = seq_df.groupby('user_id')['item_id'].apply(list).to_dict()
+        self.user_sequences = seq_df.groupby('user_id')['adgroup_id'].apply(list).to_dict()
 
         # 加载图嵌入
         graph_path = self.cfg.data_dir / "item_graph_optimized.pkl"
@@ -106,10 +106,10 @@ class DataProcessor:
 
         # 填充缺失的图嵌入
         default_graph_emb = np.zeros(64)  # 假设图嵌入维度为64
-        self.train_data['graph_emb'] = self.train_data['item_id'].apply(
+        self.train_data['graph_emb'] = self.train_data['adgroup_id'].apply(
             lambda x: self.item_graph.get(x, default_graph_emb)
         )
-        self.test_data['graph_emb'] = self.test_data['item_id'].apply(
+        self.test_data['graph_emb'] = self.test_data['adgroup_id'].apply(
             lambda x: self.item_graph.get(x, default_graph_emb)
         )
 
@@ -182,12 +182,12 @@ class RecallHandler:
     def generate_recalls(self, model):
         """生成召回结果"""
         # 准备物品池
-        item_pool = self.processor.train_data.drop_duplicates('item_id')
+        item_pool = self.processor.train_data.drop_duplicates('adgroup_id')
 
         # 生成物品嵌入
         item_embs = model.item_encoder.predict(
             {
-                'item_base': item_pool[[c for c in self.processor.item_feature_cols if c != 'item_id']].values,
+                'item_base': item_pool[[c for c in self.processor.item_feature_cols if c != 'adgroup_id']].values,
                 'item_graph': item_pool['graph_emb'].values
             },
             batch_size=self.cfg.batch_size
@@ -211,7 +211,7 @@ class RecallHandler:
             with open(self.result_dir / f"{user_id}.json", 'w') as f:
                 json.dump({
                     "user_id": int(user_id),
-                    "recalls": item_pool.iloc[top_k]['item_id'].tolist(),
+                    "recalls": item_pool.iloc[top_k]['adgroup_id'].tolist(),
                     "scores": scores[top_k].tolist()
                 }, f)
 
@@ -222,7 +222,7 @@ class RecallHandler:
             with open(self.result_dir / f"{user_id}.json") as f:
                 recalls = json.load(f)['recalls']
 
-            true_items = group['item_id'].unique()
+            true_items = group['adgroup_id'].unique()
             hits = len(set(recalls) & set(true_items))
             hit_counts.append(hits / len(true_items))
 
@@ -281,14 +281,14 @@ class RankingHandler:
             # 获取候选物品特征
             recall_items = recall_data['recalls']
             item_data = self.processor.test_data[
-                self.processor.test_data['item_id'].isin(recall_items)
-            ].drop_duplicates('item_id')
+                self.processor.test_data['adgroup_id'].isin(recall_items)
+            ].drop_duplicates('adgroup_id')
 
             if len(item_data) == 0:
                 continue
 
             # 准备模型输入
-            item_feats = item_data[[c for c in self.processor.item_feature_cols if c != 'item_id']].values
+            item_feats = item_data[[c for c in self.processor.item_feature_cols if c != 'adgroup_id']].values
             user_feats = np.tile(user_feat, (len(item_data), 1))
 
             # 预测
@@ -302,13 +302,13 @@ class RankingHandler:
 
             # 取Top2
             top2_idx = np.argsort(predictions)[-2:][::-1]
-            top2_items = item_data.iloc[top2_idx]['item_id'].values
+            top2_items = item_data.iloc[top2_idx]['adgroup_id'].values
 
             # 检查命中
             true_exposure = self.processor.test_data[
                 (self.processor.test_data['user_id'] == user_id) &
                 (self.processor.test_data['clk'] == 1)
-                ]['item_id'].values
+                ]['adgroup_id'].values
 
             hits = [int(item in true_exposure) for item in top2_items]
 
@@ -363,7 +363,7 @@ class RecommenderSystem:
         print("\n=== 排序阶段 ===")
         ranking_model = RankingModel(
             user_dim=len([c for c in self.processor.user_feature_cols if c != 'user_id']),
-            item_dim=len([c for c in self.processor.item_feature_cols if c != 'item_id'])
+            item_dim=len([c for c in self.processor.item_feature_cols if c != 'adgroup_id'])
         )
         ranking_model.compile(
             optimizer='adam',
