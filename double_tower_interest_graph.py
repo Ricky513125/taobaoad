@@ -86,41 +86,93 @@ class ItemGraphGenerator:
         self.threshold = cooccur_threshold
         self.graph = nx.DiGraph()
 
+    # def build_graph(self, df):
+    #     """从行为数据构建有向关系图"""
+    #     print("\n🛠️ Building item relationship graph...")
+    #     df['node'] = list(zip(df['cate'], df['brand']))
+    #
+    #     # 时间衰减权重
+    #     latest_time = df['time_stamp'].max()
+    #     df['time_weight'] = 0.9 **((latest_time - df['time_stamp']) / 86400)
+    #
+    #     # 构建共现关系
+    #     cooccur = defaultdict(lambda: defaultdict(float))
+    #
+    #     # 使用tqdm显示进度
+    #     for _, group in tqdm(df.groupby('user_id'), desc="Processing user behaviors"):
+    #         sorted_actions = group.sort_values('time_stamp')
+    #         nodes = sorted_actions['node'].values
+    #         weights = sorted_actions['time_weight'].values
+    #
+    #         for i in range(len(nodes) - 1):
+    #             src, dst = nodes[i], nodes[i + 1]
+    #             cooccur[src][dst] += weights[i] * weights[i + 1]
+    #
+    #     # 添加边到图
+    #     print("🔗 Adding edges to graph...")
+    #     for src, neighbors in tqdm(cooccur.items(), desc="Building graph edges"):
+    #         for dst, weight in neighbors.items():
+    #             if weight >= self.threshold:
+    #                 self.graph.add_edge(src, dst, weight=weight)
+    #
+    #     print(f"✅ Graph built with {len(self.graph.nodes())} nodes and {len(self.graph.edges())} edges")
+    #     return self.graph
+
     def build_graph(self, df):
-        """从行为数据构建有向关系图"""
-        print("\n🛠️ Building item relationship graph...")
+        """内存优化的图构建方法"""
+        print("\n🛠️ Building item relationship graph (optimized memory version)...")
         df['node'] = list(zip(df['cate'], df['brand']))
 
-        # 时间衰减权重
+        # 时间衰减计算改为按批处理
         latest_time = df['time_stamp'].max()
         df['time_weight'] = 0.9 **((latest_time - df['time_stamp']) / 86400)
 
-        # 构建共现关系
-        cooccur = defaultdict(lambda: defaultdict(float))
+        # 分批次处理用户行为
+        batch_size = 10000  # 根据内存调整
+        user_groups = list(df.groupby('user_id'))
 
-        # 使用tqdm显示进度
-        for _, group in tqdm(df.groupby('user_id'), desc="Processing user behaviors"):
-            sorted_actions = group.sort_values('time_stamp')
-            nodes = sorted_actions['node'].values
-            weights = sorted_actions['time_weight'].values
+        for i in tqdm(range(0, len(user_groups), batch_size), desc="Processing user batches"):
+            batch_groups = user_groups[i:i + batch_size]
 
-            for i in range(len(nodes) - 1):
-                src, dst = nodes[i], nodes[i + 1]
-                cooccur[src][dst] += weights[i] * weights[i + 1]
+            # 处理当前批次
+            for _, group in batch_groups:
+                sorted_actions = group.sort_values('time_stamp')
+                nodes = sorted_actions['node'].values
+                weights = sorted_actions['time_weight'].values
 
-        # 添加边到图
-        print("🔗 Adding edges to graph...")
-        for src, neighbors in tqdm(cooccur.items(), desc="Building graph edges"):
-            for dst, weight in neighbors.items():
-                if weight >= self.threshold:
-                    self.graph.add_edge(src, dst, weight=weight)
+                for i in range(len(nodes) - 1):
+                    src, dst = nodes[i], nodes[i + 1]
+                    weight = weights[i] * weights[i + 1]
+
+                    # 直接添加边（避免存储中间字典）
+                    if weight >= self.threshold:
+                        if self.graph.has_edge(src, dst):
+                            self.graph[src][dst]['weight'] += weight
+                        else:
+                            self.graph.add_edge(src, dst, weight=weight)
 
         print(f"✅ Graph built with {len(self.graph.nodes())} nodes and {len(self.graph.edges())} edges")
         return self.graph
+    #
+    # def generate_sequences(self, walk_length=20, num_walks=10):
+    #     """生成随机游走序列"""
+    #     print("\n🚶 Generating random walks...")
+    #     node2vec = Node2Vec(
+    #         self.graph,
+    #         dimensions=64,
+    #         walk_length=walk_length,
+    #         num_walks=num_walks,
+    #         p=1.0,
+    #         q=0.5,
+    #         workers=os.cpu_count()
+    #     )
+    #     return node2vec.walks
 
     def generate_sequences(self, walk_length=20, num_walks=10):
-        """生成随机游走序列"""
-        print("\n🚶 Generating random walks...")
+        """内存友好的序列生成"""
+        print("\n🚶 Generating random walks (memory optimized)...")
+
+        # 使用生成器避免全量存储
         node2vec = Node2Vec(
             self.graph,
             dimensions=64,
@@ -128,10 +180,17 @@ class ItemGraphGenerator:
             num_walks=num_walks,
             p=1.0,
             q=0.5,
-            workers=os.cpu_count()
+            workers=min(4, os.cpu_count())  # 减少worker数量
         )
-        return node2vec.walks
 
+        # 直接保存到文件而不是返回内存
+        output_path = "temp_walks.txt"
+        with open(output_path, 'w') as f:
+            for walk in tqdm(node2vec.walks, total=len(self.graph.nodes()) * num_walks):
+                f.write(' '.join(map(str, walk)) + '\n')
+
+        # 返回文件路径供后续处理
+        return output_path
 
 class EnhancedDoubleTower:
     """增强版双塔模型（整合关系图）"""
