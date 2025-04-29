@@ -8,13 +8,12 @@ from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Dot, BatchNormalization, Flatten
 from tensorflow.keras.models import Model
-from sklearn.metrics import roc_auc_score, ndcg_score, precision_score
+from sklearn.metrics import roc_auc_score, precision_score
 from tensorflow.keras.metrics import AUC
 import tensorflow_ranking as tfr
 """
 4.29 13:12
 将两个id输入到模型中进行训练
-
 """
 
 # 设置GPU内存自动增长
@@ -202,6 +201,9 @@ class DeepFMRerank:
         y_pred = self.model.predict(X_test, batch_size=4096).flatten()
         test_df['pred'] = y_pred
 
+        # 初始化NDCG指标
+        ndcg_metric = tfr.keras.metrics.NDCGMetric(name='ndcg_2', topn=2)
+
         # 按用户分组评估
         user_groups = test_df.groupby('user_id')
         ndcg_scores = []
@@ -214,15 +216,15 @@ class DeepFMRerank:
             pred = group['pred'].values
             true = group['clk'].values
 
-            # 取Top2
-            top_k_idx = np.argsort(pred)[-2:]
-            sorted_labels = true[top_k_idx]
-            ideal_labels = np.sort(true)[-2:]
-
-            # 计算指标
-            ndcg = tfr.keras.metrics.ndcg([ideal_labels], [sorted_labels], k=2)
+            # 计算NDCG
+            ndcg_metric.update_state([true], [pred])
+            ndcg = ndcg_metric.result().numpy()
             ndcg_scores.append(ndcg)
-            precision_scores.append(sorted_labels.sum() / 2)
+            ndcg_metric.reset_states()
+
+            # 计算Precision@2
+            top_k_idx = np.argsort(pred)[-2:]
+            precision_scores.append(true[top_k_idx].sum() / 2)
 
         metrics = {
             'AUC': roc_auc_score(y_test, y_pred),
