@@ -11,12 +11,21 @@ from tensorflow.keras.models import Model
 from sklearn.metrics import roc_auc_score, ndcg_score, precision_score
 from tensorflow.keras.metrics import AUC  # 添加导入
 import tensorflow_ranking as tfr  # 需要安装
+
 """
 4、27 写的普通双塔召回+deepFM 
 
 4.28 
 
 auc 从大写改到小写
+
+4.29 11点
+测试集评估结果:
+AUC: 0.5270
+NDCG@10: 1.0000
+Precision@10: 0.0000
+上次跑出结果不理想，修改指标计算的方式，并添加对数值数据的正态化 
+
 """
 
 
@@ -84,9 +93,13 @@ class DeepFMRerank:
         user_input = Input(shape=(self.user_feat_dim,), name='user_input')
         item_input = Input(shape=(self.item_feat_dim,), name='item_input')
 
+        # 数值特征标准化（关键！）
+        user_norm = BatchNormalization()(user_input)
+        item_norm = BatchNormalization()(item_input)
+
         # FM部分
-        user_emb = Dense(64, activation='relu')(user_input)
-        item_emb = Dense(64, activation='relu')(item_input)
+        user_emb = Dense(64, activation='relu')(user_norm)
+        item_emb = Dense(64, activation='relu')(item_norm)
         fm_output = Dot(axes=1)([user_emb, item_emb])
 
         # DNN部分
@@ -127,16 +140,58 @@ class DeepFMRerank:
         )
         return history
 
+    # def evaluate(self, X_test, y_test):
+    #     """模型评估"""
+    #     y_pred = self.model.predict(X_test, batch_size=4096).flatten()
+    #
+    #     metrics = {
+    #         'AUC': roc_auc_score(y_test, y_pred),
+    #         'NDCG@10': self.calculate_ndcg(y_test, y_pred, k=10),
+    #         'Precision@10': precision_score(y_test, (y_pred > 0.5).astype(int), zero_division=0)
+    #     }
+    #     return metrics, y_pred
+
     def evaluate(self, X_test, y_test):
-        """模型评估"""
-        y_pred = self.model.predict(X_test, batch_size=4096).flatten()
+        """修正后的评估逻辑：按用户分组计算指标"""
+        # 假设数据中包含user_id列（需提前处理）
+        test_df = pd.DataFrame({
+            'user_id': self.processor.test_data['user_id'],
+            'user_feat': list(X_test[0]),
+            'item_feat': list(X_test[1]),
+            'clk': y_test
+        })
+
+        # 生成每个用户的预测分数
+        test_df['pred'] = self.model.predict(X_test, batch_size=4096).flatten()
+
+        # 按用户分组计算NDCG@10和Precision@10
+        ndcg_scores = []
+        precision_scores = []
+        for user_id, group in test_df.groupby('user_id'):
+            if len(group) < 10:  # 跳过交互不足的用户
+                continue
+            pred = group['pred'].values
+            true = group['clk'].values
+
+            # 取当前用户的Top10预测
+            top_k_idx = np.argsort(pred)[-10:]
+            sorted_labels = true[top_k_idx]
+
+            # 计算NDCG@10
+            ideal_labels = np.sort(true)[-10:]
+            ndcg = tfr.keras.metrics.ndcg(sorted_labels, ideal_labels, k=10)
+            ndcg_scores.append(ndcg)
+
+            # 计算Precision@10
+            precision = (sorted_labels.sum() / 10)
+            precision_scores.append(precision)
 
         metrics = {
-            'AUC': roc_auc_score(y_test, y_pred),
-            'NDCG@10': self.calculate_ndcg(y_test, y_pred, k=10),
-            'Precision@10': precision_score(y_test, (y_pred > 0.5).astype(int), zero_division=0)
+            'AUC': roc_auc_score(y_test, test_df['pred']),
+            'NDCG@10': np.mean(ndcg_scores),
+            'Precision@10': np.mean(precision_scores)
         }
-        return metrics, y_pred
+        return metrics, test_df['pred'].values
 
     def calculate_ndcg(self, y_true, y_pred, k=10):
         top_k_idx = np.argsort(y_pred)[-k:]
