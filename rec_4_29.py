@@ -13,6 +13,7 @@ from tensorflow.keras.metrics import AUC
 from sklearn.metrics import roc_auc_score, precision_score
 import tensorflow_ranking as tfr
 
+
 # 配置参数
 class Config:
     # 路径配置
@@ -35,16 +36,15 @@ class Config:
     batch_size = 4096
     epochs = 10
 
+
 # 数据处理器
 class DataProcessor:
     def __init__(self, config):
         self.cfg = config
-        self.user_data = None
-        self.item_data = None
-        self.train_data = None
-        self.test_data = None
         self.user_sequences = None
         self.item_graph = None
+        self.train_data = None
+        self.test_data = None
 
         # 特征列定义
         self.user_feature_cols = [
@@ -62,9 +62,26 @@ class DataProcessor:
         self.train_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_train.parquet')
         self.test_data = pd.read_parquet(self.cfg.data_dir / 'processed_data_test3.parquet')
 
-        # 加载序列数据
+        # 加载序列数据（处理可能的格式问题）
         seq_path = self.cfg.seq_dir / "user_sequences_optimized.csv"
-        seq_df = pd.read_csv(seq_path)
+        try:
+            # 尝试不同分隔符读取
+            for sep in [',', '\t', ';']:
+                try:
+                    seq_df = pd.read_csv(seq_path, sep=sep, on_bad_lines='skip')
+                    if len(seq_df.columns) >= 2:  # 至少需要user_id和item_id两列
+                        break
+                except:
+                    continue
+        except Exception as e:
+            print(f"读取序列数据失败: {e}")
+            raise
+
+        # 确保有必要的列
+        if 'user_id' not in seq_df.columns or 'item_id' not in seq_df.columns:
+            raise ValueError("序列数据必须包含user_id和item_id列")
+
+        # 处理序列数据
         self.user_sequences = seq_df.groupby('user_id')['item_id'].apply(list).to_dict()
 
         # 加载图嵌入
@@ -110,6 +127,7 @@ class DataProcessor:
         else:
             return seq + [0] * (self.cfg.user_seq_len - len(seq))
 
+
 # 召回模型
 class SequenceRecallModel(tf.keras.Model):
     def __init__(self, config):
@@ -121,7 +139,7 @@ class SequenceRecallModel(tf.keras.Model):
     def _build_user_tower(self):
         """用户塔：基础特征+行为序列"""
         # 基础特征输入
-        base_input = Input(shape=(len(self.cfg.user_feature_cols)-1,))  # 排除user_id
+        base_input = Input(shape=(len(self.cfg.user_feature_cols) - 1,))  # 排除user_id
 
         # 序列特征输入
         seq_input = Input(shape=(self.cfg.user_seq_len,))
@@ -136,7 +154,7 @@ class SequenceRecallModel(tf.keras.Model):
     def _build_item_tower(self):
         """物品塔：基础特征+图嵌入"""
         # 基础特征输入
-        base_input = Input(shape=(len(self.cfg.item_feature_cols)-1,))  # 排除item_id
+        base_input = Input(shape=(len(self.cfg.item_feature_cols) - 1,))  # 排除item_id
 
         # 图嵌入输入
         graph_input = Input(shape=(64,))  # 假设图嵌入维度64
@@ -150,6 +168,7 @@ class SequenceRecallModel(tf.keras.Model):
         user_emb = self.user_encoder([inputs['user_base'], inputs['user_seq']])
         item_emb = self.item_encoder([inputs['item_base'], inputs['item_graph']])
         return tf.linalg.matmul(user_emb, item_emb, transpose_b=True)
+
 
 # 召回处理器
 class RecallHandler:
@@ -210,6 +229,7 @@ class RecallHandler:
         print(f"\n召回评估 - Recall@{self.cfg.recall_top_k}: {recall:.4f}")
         return recall
 
+
 # 排序模型
 class RankingModel(tf.keras.Model):
     def __init__(self, user_dim, item_dim):
@@ -229,6 +249,7 @@ class RankingModel(tf.keras.Model):
         x = self.dense2(x)
         x = self.bn2(x)
         return self.output_layer(x)
+
 
 # 排序处理器
 class RankingHandler:
@@ -286,7 +307,7 @@ class RankingHandler:
             true_exposure = self.processor.test_data[
                 (self.processor.test_data['user_id'] == user_id) &
                 (self.processor.test_data['clk'] == 1)
-            ]['item_id'].values
+                ]['item_id'].values
 
             hits = [int(item in true_exposure) for item in top2_items]
 
@@ -309,6 +330,7 @@ class RankingHandler:
 
         print(f"\n排序评估 - Precision@2: {precision:.4f}")
         return results
+
 
 # 完整流程
 class RecommenderSystem:
@@ -367,6 +389,7 @@ class RecommenderSystem:
 
         with open(self.cfg.result_dir / "final_metrics.json", 'w') as f:
             json.dump(summary, f, indent=2)
+
 
 if __name__ == "__main__":
     # 初始化配置
