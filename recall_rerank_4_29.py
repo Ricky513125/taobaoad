@@ -26,6 +26,8 @@ NDCG@10: 1.0000
 Precision@10: 0.0000
 上次跑出结果不理想，修改指标计算的方式，并添加对数值数据的正态化 
 
+12:36 
+self.processor = DataProcessor() 在deepFM的evaluate中需要使用
 """
 
 
@@ -85,6 +87,7 @@ class DeepFMRerank:
         self.user_feat_dim = user_feat_dim
         self.item_feat_dim = item_feat_dim
         self.model = self._build_model()
+        self.processor = DataProcessor()
         print(f"\n初始化模型: 用户特征维度={user_feat_dim}, 物品特征维度={item_feat_dim}")
 
     def _build_model(self):
