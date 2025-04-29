@@ -238,6 +238,18 @@ class RecallEvaluator:
 
         return pd.DataFrame(rerank_data)
 
+    def check_vector_spaces(self):
+        """检查双塔输出空间是否匹配"""
+        # 随机选取5个用户和物品
+        user_sample = self.user_tower.predict(np.random.rand(5, 8))  # 假设8个特征
+        item_sample = self.item_tower.predict(np.random.rand(5, 6))  # 假设6个特征
+
+        print("\n=== 向量空间验证 ===")
+        print(f"用户向量均值: {np.mean(user_sample):.4f} ± {np.std(user_sample):.4f}")
+        print(f"物品向量均值: {np.mean(item_sample):.4f} ± {np.std(item_sample):.4f}")
+        print(
+            f"余弦相似度范围: {np.dot(user_sample, item_sample.T).min():.2f} - {np.dot(user_sample, item_sample.T).max():.2f}")
+
 class UserProfileAccessor:
     """用户画像访问器（与之前相同）"""
 
@@ -279,6 +291,23 @@ if __name__ == "__main__":
         item_ids_path="recall/item_ids_1745730778.npy",
         user_profile_path="data/user.parquet"
     )
+
+    evaluator.check_vector_spaces()
+    # 第三步：验证单个用户召回
+    test_user_id = 1  # 使用您调试信息中的首用户ID
+    test_items = [133190, 142774, 769066]  # 该用户的真实物品
+
+    user_feat = evaluator.user_profile.get_user_features(test_user_id)
+    user_vec = evaluator.user_tower.predict(np.array([list(user_feat.values())]))
+
+    distances, indices = evaluator.index.search(user_vec.astype('float32'), 1000)
+    recalled = evaluator.item_ids[indices[0]]
+    print("\n=== 单用户验证 ===")
+    print(f"用户ID: {test_user_id}")
+    print(f"真实物品: {test_items}")
+    print(f"召回物品交集: {set(recalled) & set(test_items)}")
+    print(f"Top100召回示例: {recalled[:100]}")
+
 
     # 执行评估（添加外层进度描述）
     print("=" * 50)
