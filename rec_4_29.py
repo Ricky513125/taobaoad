@@ -15,6 +15,10 @@ from tensorflow.keras.metrics import AUC
 from sklearn.metrics import roc_auc_score, precision_score
 import tensorflow_ranking as tfr
 
+"""
+完整版的处理流程
+带ID
+"""
 
 # 配置参数
 class Config:
@@ -35,7 +39,7 @@ class Config:
     item_vocab_size = 10000  # 物品ID总数
 
     # 训练参数
-    batch_size = 4096
+    batch_size = 32
     epochs = 10
 
 
